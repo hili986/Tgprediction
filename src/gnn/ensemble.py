@@ -40,12 +40,15 @@ class DeepEnsembleTg:
         model_fn: Callable[[], TandemM2M],
         n_models: int = 5,
         device: str = "cuda",
+        tabular_dim: int = 56,
     ):
         self.n_models = n_models
         self.device = device
+        self.tabular_dim = tabular_dim
         self.models = [model_fn().to(device) for _ in range(n_models)]
         self.trainers = [
-            TgPretrainer(model, device=device) for model in self.models
+            TgPretrainer(model, device=device, tabular_dim=tabular_dim)
+            for model in self.models
         ]
         self.conformal_scores = None  # Calibrated after training
 
@@ -137,7 +140,7 @@ class DeepEnsembleTg:
         for batch in cal_loader:
             batch = batch.to(self.device)
             tabular = batch.tabular if hasattr(batch, "tabular") else torch.zeros(
-                batch.num_graphs, 1, device=self.device
+                batch.num_graphs, self.tabular_dim, device=self.device
             )
             baseline = batch.baseline if hasattr(batch, "baseline") else None
 

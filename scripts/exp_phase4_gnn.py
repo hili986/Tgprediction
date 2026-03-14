@@ -167,7 +167,7 @@ def run_e11(device="cuda"):
 
     # Per-fold: train GNN on train split, extract embeddings, then GBR
     cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
-    r2_scores, mae_scores = [], []
+    r2_scores, mae_scores, rmse_scores = [], [], []
 
     for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y_valid)):
         train_graphs = [graphs[i] for i in train_idx]
@@ -175,9 +175,10 @@ def run_e11(device="cuda"):
 
         # Train GNN on train split only (no leakage)
         # Use finetune (lr=1e-4) not pretrain (lr=1e-3) — small train set (~243 samples)
-        model = TandemM2M(in_dim=25, tabular_dim=X_valid.shape[1])
+        tabular_dim = X_valid.shape[1]
+        model = TandemM2M(in_dim=25, tabular_dim=tabular_dim)
         train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
-        trainer = TgPretrainer(model, device=device)
+        trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim)
         trainer.finetune(train_loader, epochs=30, patience=10)
 
         # Extract embeddings for train and test
@@ -194,11 +195,15 @@ def run_e11(device="cuda"):
         )
         gbr.fit(X_train_combined, y_valid[train_idx])
         y_pred = gbr.predict(X_test_combined)
-        r2_scores.append(r2_score(y_valid[test_idx], y_pred))
-        mae_scores.append(mean_absolute_error(y_valid[test_idx], y_pred))
+        r2 = r2_score(y_valid[test_idx], y_pred)
+        mae = mean_absolute_error(y_valid[test_idx], y_pred)
+        rmse = np.sqrt(np.mean((y_valid[test_idx] - y_pred) ** 2))
+        r2_scores.append(r2)
+        mae_scores.append(mae)
+        rmse_scores.append(rmse)
 
         if (fold_idx + 1) % 5 == 0:
-            print(f"  Fold {fold_idx+1}/15: R2={r2_scores[-1]:.4f}")
+            print(f"  Fold {fold_idx+1}/15: R2={r2:.4f}")
 
     result = {
         "experiment": "E11",
@@ -207,6 +212,8 @@ def run_e11(device="cuda"):
         "R2_std": float(np.std(r2_scores)),
         "MAE_mean": float(np.mean(mae_scores)),
         "MAE_std": float(np.std(mae_scores)),
+        "RMSE_mean": float(np.mean(rmse_scores)),
+        "RMSE_std": float(np.std(rmse_scores)),
         "features": f"M2M {X_valid.shape[1]}d + GNN 64d",
         "model": "GBR on fused features (per-fold GNN)",
     }
@@ -258,15 +265,16 @@ def run_e12(device="cuda"):
 
     # Per-fold: pretrain(external) -> finetune(train) -> extract embeddings -> GBR
     cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
-    r2_scores, mae_scores = [], []
+    tabular_dim = X_valid.shape[1]
+    r2_scores, mae_scores, rmse_scores = [], [], []
 
     for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y_valid)):
         train_graphs = [graphs[i] for i in train_idx]
         test_graphs = [graphs[i] for i in test_idx]
 
         # Fresh model per fold
-        model = TandemM2M(in_dim=25, tabular_dim=X_valid.shape[1])
-        trainer = TgPretrainer(model, device=device)
+        model = TandemM2M(in_dim=25, tabular_dim=tabular_dim)
+        trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim)
 
         # Pretrain on external data (no leakage — external set)
         if pretrain_loader is not None:
@@ -290,11 +298,15 @@ def run_e12(device="cuda"):
         )
         gbr.fit(X_train_fused, y_valid[train_idx])
         y_pred = gbr.predict(X_test_fused)
-        r2_scores.append(r2_score(y_valid[test_idx], y_pred))
-        mae_scores.append(mean_absolute_error(y_valid[test_idx], y_pred))
+        r2 = r2_score(y_valid[test_idx], y_pred)
+        mae = mean_absolute_error(y_valid[test_idx], y_pred)
+        rmse = np.sqrt(np.mean((y_valid[test_idx] - y_pred) ** 2))
+        r2_scores.append(r2)
+        mae_scores.append(mae)
+        rmse_scores.append(rmse)
 
         if (fold_idx + 1) % 5 == 0:
-            print(f"  Fold {fold_idx+1}/15: R2={r2_scores[-1]:.4f}")
+            print(f"  Fold {fold_idx+1}/15: R2={r2:.4f}")
 
     result = {
         "experiment": "E12",
@@ -304,7 +316,9 @@ def run_e12(device="cuda"):
         "R2_std": float(np.std(r2_scores)),
         "MAE_mean": float(np.mean(mae_scores)),
         "MAE_std": float(np.std(mae_scores)),
-        "features": f"M2M {X_valid.shape[1]}d + GNN 64d",
+        "RMSE_mean": float(np.mean(rmse_scores)),
+        "RMSE_std": float(np.std(rmse_scores)),
+        "features": f"M2M {tabular_dim}d + GNN 64d",
         "model": "GBR on fused features (per-fold GNN)",
     }
     _save_result("E12", result)
@@ -332,14 +346,15 @@ def run_e13(device="cuda"):
 
     # Nested CV on valid subset
     cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
-    r2_scores, mae_scores = [], []
+    r2_scores, mae_scores, rmse_scores = [], [], []
 
     for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y_valid)):
         train_graphs = [graphs[i] for i in train_idx]
         test_graphs = [graphs[i] for i in test_idx]
 
         model = MultiTaskTgModel(in_dim=25).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        # lr=1e-4 for small dataset (Bicerano ~243 train samples per fold)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
         train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
         test_loader = DataLoader(test_graphs, batch_size=32, shuffle=False)
@@ -347,8 +362,15 @@ def run_e13(device="cuda"):
         # Train — NOTE: only Tg targets provided (density/sol_param not in Bicerano).
         # Multitask benefit comes from external pretrain data with auxiliary labels.
         # On Bicerano alone, this effectively trains single-task Tg.
+        best_loss = float("inf")
+        epochs_no_improve = 0
+        patience = 10
+        best_state = None
+
         model.train()
         for epoch in range(50):
+            epoch_loss = 0.0
+            n_batches = 0
             for batch in train_loader:
                 batch = batch.to(device)
                 preds = model(batch)
@@ -356,7 +378,26 @@ def run_e13(device="cuda"):
                 loss = model.compute_loss(preds, targets)
                 optimizer.zero_grad()
                 loss.backward()
+                # Gradient clipping to prevent exploding gradients
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
+                epoch_loss += loss.item()
+                n_batches += 1
+
+            avg_loss = epoch_loss / max(n_batches, 1)
+            if avg_loss < best_loss:
+                best_loss = avg_loss
+                epochs_no_improve = 0
+                best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            else:
+                epochs_no_improve += 1
+
+            if epochs_no_improve >= patience:
+                break
+
+        # Restore best model
+        if best_state is not None:
+            model.load_state_dict(best_state)
 
         # Evaluate
         model.eval()
@@ -374,8 +415,12 @@ def run_e13(device="cuda"):
                 all_true.extend(true.tolist())
 
         if len(all_true) > 1:
-            r2_scores.append(r2_score(all_true, all_preds))
-            mae_scores.append(mean_absolute_error(all_true, all_preds))
+            r2 = r2_score(all_true, all_preds)
+            mae = mean_absolute_error(all_true, all_preds)
+            rmse = np.sqrt(np.mean((np.array(all_true) - np.array(all_preds)) ** 2))
+            r2_scores.append(r2)
+            mae_scores.append(mae)
+            rmse_scores.append(rmse)
 
     result = {
         "experiment": "E13",
@@ -384,6 +429,8 @@ def run_e13(device="cuda"):
         "R2_std": float(np.std(r2_scores)) if r2_scores else 0,
         "MAE_mean": float(np.mean(mae_scores)) if mae_scores else 0,
         "MAE_std": float(np.std(mae_scores)) if mae_scores else 0,
+        "RMSE_mean": float(np.mean(rmse_scores)) if rmse_scores else 0,
+        "RMSE_std": float(np.std(rmse_scores)) if rmse_scores else 0,
         "model": "MultiTaskTgModel",
     }
     _save_result("E13", result)
@@ -420,8 +467,22 @@ def run_e14(device="cuda"):
 
     tabular_dim = X_valid.shape[1]
 
+    # Try loading pretrain data (design doc: ~59K external data)
+    pretrain_loader = None
+    try:
+        from src.data.external_datasets import build_extended_dataset
+        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(layer="M2M")
+        ext_graphs, ext_valid_idx = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
+        ext_X_valid = ext_X[ext_valid_idx]
+        for i, g in enumerate(ext_graphs):
+            g.tabular = torch.tensor(ext_X_valid[i], dtype=torch.float).unsqueeze(0)
+        pretrain_loader = DataLoader(ext_graphs, batch_size=256, shuffle=True)
+        print(f"Pretrain data: {len(ext_graphs)} external polymers")
+    except Exception as e:
+        print(f"Pretrain data unavailable: {e}")
+
     cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
-    r2_scores, mae_scores = [], []
+    r2_scores, mae_scores, rmse_scores = [], [], []
     coverages, widths = [], []
 
     for fold_idx, (train_cal_idx, test_idx) in enumerate(cv.split(y_valid)):
@@ -441,10 +502,14 @@ def run_e14(device="cuda"):
         def model_fn():
             return TandemM2M(in_dim=25, tabular_dim=tabular_dim)
 
-        ensemble = DeepEnsembleTg(model_fn, n_models=5, device=device)
+        ensemble = DeepEnsembleTg(
+            model_fn, n_models=5, device=device, tabular_dim=tabular_dim,
+        )
 
-        # Train ensemble
+        # Train ensemble (pretrain on external + finetune on train fold)
         ensemble.fit(
+            pretrain_loader=pretrain_loader,
+            pretrain_epochs=50 if pretrain_loader is not None else 0,
             finetune_loader=train_loader,
             finetune_epochs=50,
             patience=10,
@@ -475,11 +540,13 @@ def run_e14(device="cuda"):
         if len(y_true) > 1:
             r2 = r2_score(y_true, y_pred)
             mae = mean_absolute_error(y_true, y_pred)
+            rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
             coverage = float(np.mean((y_true >= y_lower) & (y_true <= y_upper)))
             width = float(np.mean(y_upper - y_lower))
 
             r2_scores.append(r2)
             mae_scores.append(mae)
+            rmse_scores.append(rmse)
             coverages.append(coverage)
             widths.append(width)
 
@@ -488,11 +555,14 @@ def run_e14(device="cuda"):
 
     result = {
         "experiment": "E14",
+        "pretrain_used": pretrain_loader is not None,
         "description": "Deep Ensemble x5 + Conformal Prediction (Nested CV)",
         "R2_mean": float(np.mean(r2_scores)) if r2_scores else 0,
         "R2_std": float(np.std(r2_scores)) if r2_scores else 0,
         "MAE_mean": float(np.mean(mae_scores)) if mae_scores else 0,
         "MAE_std": float(np.std(mae_scores)) if mae_scores else 0,
+        "RMSE_mean": float(np.mean(rmse_scores)) if rmse_scores else 0,
+        "RMSE_std": float(np.std(rmse_scores)) if rmse_scores else 0,
         "coverage_90_mean": float(np.mean(coverages)) if coverages else 0,
         "avg_interval_width_mean": float(np.mean(widths)) if widths else 0,
         "n_folds": len(r2_scores),
@@ -549,7 +619,7 @@ def run_e15(device="cuda"):
 
     # Nested CV on valid subset
     cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
-    r2_scores, mae_scores = [], []
+    r2_scores, mae_scores, rmse_scores = [], [], []
 
     for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y_valid)):
         train_graphs = [graphs[i] for i in train_idx]
@@ -560,7 +630,7 @@ def run_e15(device="cuda"):
 
         # Create model
         model = TandemM2M(in_dim=25, tabular_dim=tabular_dim)
-        trainer = TgPretrainer(model, device=device)
+        trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim)
 
         # Pretrain if available
         if pretrain_loader is not None:
@@ -589,8 +659,10 @@ def run_e15(device="cuda"):
         if len(all_true) > 1:
             r2 = r2_score(all_true, all_preds)
             mae = mean_absolute_error(all_true, all_preds)
+            rmse = np.sqrt(np.mean((np.array(all_true) - np.array(all_preds)) ** 2))
             r2_scores.append(r2)
             mae_scores.append(mae)
+            rmse_scores.append(rmse)
             print(f"Fold {fold_idx+1}/15: R2={r2:.4f}")
         else:
             print(f"Fold {fold_idx+1}/15: skipped (too few test samples)")
@@ -603,6 +675,8 @@ def run_e15(device="cuda"):
         "R2_std": float(np.std(r2_scores)),
         "MAE_mean": float(np.mean(mae_scores)),
         "MAE_std": float(np.std(mae_scores)),
+        "RMSE_mean": float(np.mean(rmse_scores)),
+        "RMSE_std": float(np.std(rmse_scores)),
         "n_folds": len(r2_scores),
         "model": "TandemM2M (pretrained)",
         "features": f"M2M {tabular_dim}d + graph 25d atoms + 6d edges",
