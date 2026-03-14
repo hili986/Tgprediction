@@ -31,19 +31,18 @@ def _ensure_results_dir():
     os.makedirs("results/phase4", exist_ok=True)
 
 
-def _extract_embeddings(graph_list, model, device):
-    """Extract GNN embeddings for a list of graphs using a trained model."""
+def _extract_embeddings(graph_list, model, device, batch_size=64):
+    """Extract GNN embeddings for a list of graphs using batch inference."""
     import torch
+    from torch_geometric.loader import DataLoader
     embs = []
+    loader = DataLoader(graph_list, batch_size=batch_size, shuffle=False)
     with torch.no_grad():
-        for g in graph_list:
-            g_dev = g.to(device)
-            g_dev.batch = torch.zeros(
-                g_dev.x.size(0), dtype=torch.long, device=device
-            )
-            emb = model.get_embedding(g_dev).cpu().numpy()
-            embs.append(emb.squeeze())
-    return np.array(embs)
+        for batch in loader:
+            batch = batch.to(device)
+            emb = model.get_embedding(batch).cpu().numpy()  # [B, gnn_out]
+            embs.append(emb)
+    return np.vstack(embs)
 
 
 def _save_result(exp_id: str, result: dict):
@@ -128,6 +127,7 @@ def run_e10(device="cuda"):
         finetune_epochs=50,
         patience=10,
         device=device,
+        gnn_config={"in_dim": 25, "gnn_hidden": 128, "gnn_out": 64, "edge_dim": 6},
     )
 
     result["experiment"] = "E10"
@@ -175,13 +175,16 @@ def run_e11(device="cuda"):
         train_graphs = [graphs[i] for i in train_idx]
         test_graphs = [graphs[i] for i in test_idx]
 
-        # Train GNN on train split only (no leakage)
-        # Use finetune (lr=1e-4) not pretrain (lr=1e-3) — small train set (~243 samples)
+        # Train GNN from scratch on train split (no pretrain, no layer freezing)
+        # Use pretrain() for correct lr=1e-3, dropout=0.2 (from-scratch training)
         tabular_dim = X_valid.shape[1]
-        model = TandemM2M(in_dim=25, tabular_dim=tabular_dim)
+        model = TandemM2M(
+            in_dim=25, tabular_dim=tabular_dim,
+            gnn_hidden=128, gnn_out=64, edge_dim=6,
+        )
         train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
-        trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim, freeze_layers=0)
-        trainer.finetune(train_loader, epochs=30, patience=10)
+        trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim)
+        trainer.pretrain(train_loader, epochs=30)
 
         # Extract embeddings for train and test
         model.eval()
@@ -277,7 +280,10 @@ def run_e12(device="cuda"):
         test_graphs = [graphs[i] for i in test_idx]
 
         # Fresh model per fold
-        model = TandemM2M(in_dim=25, tabular_dim=tabular_dim)
+        model = TandemM2M(
+            in_dim=25, tabular_dim=tabular_dim,
+            gnn_hidden=128, gnn_out=64, edge_dim=6,
+        )
         trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim)
 
         # Pretrain on external data (no leakage — external set)
@@ -510,7 +516,10 @@ def run_e14(device="cuda"):
         test_loader = DataLoader(test_graphs, batch_size=32, shuffle=False)
 
         def model_fn():
-            return TandemM2M(in_dim=25, tabular_dim=tabular_dim)
+            return TandemM2M(
+                in_dim=25, tabular_dim=tabular_dim,
+                gnn_hidden=128, gnn_out=64, edge_dim=6,
+            )
 
         ensemble = DeepEnsembleTg(
             model_fn, n_models=5, device=device, tabular_dim=tabular_dim,
@@ -537,10 +546,10 @@ def run_e14(device="cuda"):
             )
             pred, lower, upper = ensemble.predict_interval(batch, tab)
             true = batch.y.squeeze().cpu().numpy()
-            all_preds.extend(pred.tolist())
-            all_true.extend(true.tolist() if true.ndim > 0 else [true.item()])
-            all_lower.extend(lower.tolist())
-            all_upper.extend(upper.tolist())
+            all_preds.extend(np.atleast_1d(pred).tolist())
+            all_true.extend(np.atleast_1d(true).tolist())
+            all_lower.extend(np.atleast_1d(lower).tolist())
+            all_upper.extend(np.atleast_1d(upper).tolist())
 
         y_true = np.array(all_true)
         y_pred = np.array(all_preds)
@@ -641,7 +650,10 @@ def run_e15(device="cuda"):
         test_loader = DataLoader(test_graphs, batch_size=32, shuffle=False)
 
         # Create model
-        model = TandemM2M(in_dim=25, tabular_dim=tabular_dim)
+        model = TandemM2M(
+            in_dim=25, tabular_dim=tabular_dim,
+            gnn_hidden=128, gnn_out=64, edge_dim=6,
+        )
         trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim)
 
         # Pretrain if available

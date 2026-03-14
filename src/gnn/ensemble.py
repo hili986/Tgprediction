@@ -48,6 +48,8 @@ class DeepEnsembleTg:
         self.models = []
         for i in range(n_models):
             torch.manual_seed(42 + i)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(42 + i)
             self.models.append(model_fn().to(device))
         self.trainers = [
             TgPretrainer(model, device=device, tabular_dim=tabular_dim)
