@@ -37,8 +37,13 @@ class TgPretrainer:
         device: Device string ("cuda" or "cpu").
         lr_pretrain: Learning rate for pretraining (default: 1e-3).
         lr_finetune: Learning rate for finetuning (default: 1e-4).
-        weight_decay: L2 regularization (default: 1e-4).
+        weight_decay_pretrain: L2 regularization for pretrain (default: 1e-4).
+        weight_decay_finetune: L2 regularization for finetune (default: 1e-3).
         freeze_layers: Number of GAT layers to freeze during finetuning.
+        tabular_dim: Dimension of tabular features (default: 56 for M2M).
+            Used for correct fallback tensor shape when batch lacks .tabular.
+        dropout_pretrain: Dropout rate during pretraining (default: 0.2).
+        dropout_finetune: Dropout rate during finetuning (default: 0.3).
     """
 
     def __init__(
@@ -48,14 +53,22 @@ class TgPretrainer:
         lr_pretrain: float = 1e-3,
         lr_finetune: float = 1e-4,
         weight_decay: float = 1e-4,
+        weight_decay_finetune: float = 1e-3,
         freeze_layers: int = 2,
+        tabular_dim: int = 56,
+        dropout_pretrain: float = 0.2,
+        dropout_finetune: float = 0.3,
     ):
         self.model = model.to(device)
         self.device = device
         self.lr_pretrain = lr_pretrain
         self.lr_finetune = lr_finetune
-        self.weight_decay = weight_decay
+        self.weight_decay_pretrain = weight_decay
+        self.weight_decay_finetune = weight_decay_finetune
         self.freeze_layers = freeze_layers
+        self.tabular_dim = tabular_dim
+        self.dropout_pretrain = dropout_pretrain
+        self.dropout_finetune = dropout_finetune
         self.criterion = nn.MSELoss()
         self.history = {"pretrain": [], "finetune": []}
 
@@ -76,10 +89,11 @@ class TgPretrainer:
             Training history dict.
         """
         self.model.unfreeze_all()
+        self.model.set_dropout(self.dropout_pretrain)
         optimizer = Adam(
             self.model.parameters(),
             lr=self.lr_pretrain,
-            weight_decay=self.weight_decay,
+            weight_decay=self.weight_decay_pretrain,
         )
         scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
 
@@ -143,15 +157,16 @@ class TgPretrainer:
         Returns:
             Training history dict.
         """
-        # Freeze early GAT layers
+        # Freeze early GAT layers and switch dropout
         self.model.freeze_gnn_layers(self.freeze_layers)
+        self.model.set_dropout(self.dropout_finetune)
 
         # Only optimize trainable parameters
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
         optimizer = Adam(
             trainable_params,
             lr=self.lr_finetune,
-            weight_decay=self.weight_decay,
+            weight_decay=self.weight_decay_finetune,
         )
         scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
 
@@ -226,7 +241,7 @@ class TgPretrainer:
         for batch in loader:
             batch = batch.to(self.device)
             tabular = batch.tabular if hasattr(batch, "tabular") else torch.zeros(
-                batch.num_graphs, 1, device=self.device
+                batch.num_graphs, self.tabular_dim, device=self.device
             )
             baseline = batch.baseline if hasattr(batch, "baseline") else None
 
@@ -255,7 +270,7 @@ class TgPretrainer:
         for batch in loader:
             batch = batch.to(self.device)
             tabular = batch.tabular if hasattr(batch, "tabular") else torch.zeros(
-                batch.num_graphs, 1, device=self.device
+                batch.num_graphs, self.tabular_dim, device=self.device
             )
             baseline = batch.baseline if hasattr(batch, "baseline") else None
 
@@ -282,6 +297,11 @@ class TgPretrainer:
                     "freeze_layers": self.freeze_layers,
                     "lr_pretrain": self.lr_pretrain,
                     "lr_finetune": self.lr_finetune,
+                    "weight_decay_pretrain": self.weight_decay_pretrain,
+                    "weight_decay_finetune": self.weight_decay_finetune,
+                    "dropout_pretrain": self.dropout_pretrain,
+                    "dropout_finetune": self.dropout_finetune,
+                    "tabular_dim": self.tabular_dim,
                 },
             },
             path,

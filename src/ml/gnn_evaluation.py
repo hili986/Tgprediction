@@ -144,7 +144,7 @@ def nested_cv_gnn(
             edge_dim=config.get("edge_dim", 6),
         )
 
-        trainer = TgPretrainer(model, device=device)
+        trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim)
 
         # Stage 1: Pretrain
         if pretrain_loader is not None:

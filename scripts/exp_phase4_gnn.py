@@ -129,7 +129,8 @@ def run_e10(device="cuda"):
     )
 
     result["experiment"] = "E10"
-    result["description"] = "Tandem-M2M + pretrain"
+    result["pretrain_used"] = pretrain_data is not None
+    result["description"] = "Tandem-M2M + pretrain" if pretrain_data else "Tandem-M2M (pretrain FAILED, same as E9)"
     _save_result("E10", result)
     print(f"E10 Result: R2={result['R2_mean']:.4f} +/- {result['R2_std']:.4f}")
     return result
@@ -173,10 +174,11 @@ def run_e11(device="cuda"):
         test_graphs = [graphs[i] for i in test_idx]
 
         # Train GNN on train split only (no leakage)
+        # Use finetune (lr=1e-4) not pretrain (lr=1e-3) — small train set (~243 samples)
         model = TandemM2M(in_dim=25, tabular_dim=X_valid.shape[1])
         train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
-        trainer = TgPretrainer(model, device=device, lr_pretrain=1e-3)
-        trainer.pretrain(train_loader, epochs=30)
+        trainer = TgPretrainer(model, device=device)
+        trainer.finetune(train_loader, epochs=30, patience=10)
 
         # Extract embeddings for train and test
         model.eval()
@@ -296,6 +298,7 @@ def run_e12(device="cuda"):
 
     result = {
         "experiment": "E12",
+        "pretrain_used": pretrain_loader is not None,
         "description": "PPF+VPD+GNN(64d) -> GBR cross-paradigm fusion (per-fold)",
         "R2_mean": float(np.mean(r2_scores)),
         "R2_std": float(np.std(r2_scores)),
@@ -341,7 +344,9 @@ def run_e13(device="cuda"):
         train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
         test_loader = DataLoader(test_graphs, batch_size=32, shuffle=False)
 
-        # Train
+        # Train — NOTE: only Tg targets provided (density/sol_param not in Bicerano).
+        # Multitask benefit comes from external pretrain data with auxiliary labels.
+        # On Bicerano alone, this effectively trains single-task Tg.
         model.train()
         for epoch in range(50):
             for batch in train_loader:
@@ -387,92 +392,116 @@ def run_e13(device="cuda"):
 
 
 def run_e14(device="cuda"):
-    """E14: Deep Ensemble x5 + Conformal Prediction."""
+    """E14: Deep Ensemble x5 + Conformal Prediction (Nested CV).
+
+    Per-fold: train 60% / calibrate 20% / test 20% within each outer fold.
+    Uses RepeatedKFold for comparability with E9-E13/E15.
+    """
     import torch
     from src.features.feature_pipeline import build_dataset_v2
     from src.gnn.graph_builder import batch_smiles_to_graphs
     from src.gnn.tandem_m2m import TandemM2M
     from src.gnn.ensemble import DeepEnsembleTg
     from torch_geometric.loader import DataLoader
-    from sklearn.model_selection import train_test_split
+    from sklearn.model_selection import RepeatedKFold, train_test_split
     from sklearn.metrics import r2_score, mean_absolute_error
 
     print("=" * 60)
-    print("E14: Deep Ensemble x5 + Conformal")
+    print("E14: Deep Ensemble x5 + Conformal (Nested CV)")
     print("=" * 60)
 
     X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
     graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
     X_valid = X[valid_idx]
+    y_valid = y[valid_idx]
 
     for i, g in enumerate(graphs):
         g.tabular = torch.tensor(X_valid[i], dtype=torch.float).unsqueeze(0)
 
-    # Split: train 60%, cal 20%, test 20%
-    n = len(graphs)
-    idx = np.arange(n)
-    train_idx, test_idx = train_test_split(idx, test_size=0.2, random_state=42)
-    train_idx, cal_idx = train_test_split(train_idx, test_size=0.25, random_state=42)
-
-    train_graphs = [graphs[i] for i in train_idx]
-    cal_graphs = [graphs[i] for i in cal_idx]
-    test_graphs = [graphs[i] for i in test_idx]
-
-    train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
-    cal_loader = DataLoader(cal_graphs, batch_size=32, shuffle=False)
-    test_loader = DataLoader(test_graphs, batch_size=32, shuffle=False)
-
     tabular_dim = X_valid.shape[1]
 
-    def model_fn():
-        return TandemM2M(in_dim=25, tabular_dim=tabular_dim)
+    cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
+    r2_scores, mae_scores = [], []
+    coverages, widths = [], []
 
-    ensemble = DeepEnsembleTg(model_fn, n_models=5, device=device)
-
-    # Train ensemble
-    ensemble.fit(
-        finetune_loader=train_loader,
-        finetune_epochs=50,
-        patience=10,
-    )
-
-    # Calibrate
-    ensemble.calibrate(cal_loader, confidence=0.9)
-
-    # Evaluate on test set
-    all_preds, all_true, all_lower, all_upper = [], [], [], []
-    for batch in test_loader:
-        batch = batch.to(device)
-        tab = batch.tabular if hasattr(batch, "tabular") else torch.zeros(
-            batch.num_graphs, tabular_dim, device=device
+    for fold_idx, (train_cal_idx, test_idx) in enumerate(cv.split(y_valid)):
+        # Split train_cal into train (75%) and calibration (25%)
+        train_idx, cal_idx = train_test_split(
+            train_cal_idx, test_size=0.25, random_state=42 + fold_idx,
         )
-        pred, lower, upper = ensemble.predict_interval(batch, tab)
-        true = batch.y.squeeze().cpu().numpy()
-        all_preds.extend(pred.tolist())
-        all_true.extend(true.tolist() if true.ndim > 0 else [true.item()])
-        all_lower.extend(lower.tolist())
-        all_upper.extend(upper.tolist())
 
-    y_true = np.array(all_true)
-    y_pred = np.array(all_preds)
-    y_lower = np.array(all_lower)
-    y_upper = np.array(all_upper)
+        train_graphs = [graphs[i] for i in train_idx]
+        cal_graphs = [graphs[i] for i in cal_idx]
+        test_graphs = [graphs[i] for i in test_idx]
 
-    coverage = np.mean((y_true >= y_lower) & (y_true <= y_upper))
-    avg_width = np.mean(y_upper - y_lower)
+        train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
+        cal_loader = DataLoader(cal_graphs, batch_size=32, shuffle=False)
+        test_loader = DataLoader(test_graphs, batch_size=32, shuffle=False)
+
+        def model_fn():
+            return TandemM2M(in_dim=25, tabular_dim=tabular_dim)
+
+        ensemble = DeepEnsembleTg(model_fn, n_models=5, device=device)
+
+        # Train ensemble
+        ensemble.fit(
+            finetune_loader=train_loader,
+            finetune_epochs=50,
+            patience=10,
+        )
+
+        # Calibrate on held-out calibration set
+        ensemble.calibrate(cal_loader, confidence=0.9)
+
+        # Evaluate on test fold
+        all_preds, all_true, all_lower, all_upper = [], [], [], []
+        for batch in test_loader:
+            batch = batch.to(device)
+            tab = batch.tabular if hasattr(batch, "tabular") else torch.zeros(
+                batch.num_graphs, tabular_dim, device=device
+            )
+            pred, lower, upper = ensemble.predict_interval(batch, tab)
+            true = batch.y.squeeze().cpu().numpy()
+            all_preds.extend(pred.tolist())
+            all_true.extend(true.tolist() if true.ndim > 0 else [true.item()])
+            all_lower.extend(lower.tolist())
+            all_upper.extend(upper.tolist())
+
+        y_true = np.array(all_true)
+        y_pred = np.array(all_preds)
+        y_lower = np.array(all_lower)
+        y_upper = np.array(all_upper)
+
+        if len(y_true) > 1:
+            r2 = r2_score(y_true, y_pred)
+            mae = mean_absolute_error(y_true, y_pred)
+            coverage = float(np.mean((y_true >= y_lower) & (y_true <= y_upper)))
+            width = float(np.mean(y_upper - y_lower))
+
+            r2_scores.append(r2)
+            mae_scores.append(mae)
+            coverages.append(coverage)
+            widths.append(width)
+
+            if (fold_idx + 1) % 5 == 0:
+                print(f"  Fold {fold_idx+1}/15: R2={r2:.4f}, Cov={coverage:.3f}, Width={width:.1f}K")
 
     result = {
         "experiment": "E14",
-        "description": "Deep Ensemble x5 + Conformal Prediction",
-        "R2": float(r2_score(y_true, y_pred)),
-        "MAE": float(mean_absolute_error(y_true, y_pred)),
-        "coverage_90": float(coverage),
-        "avg_interval_width": float(avg_width),
-        "n_test": len(y_true),
+        "description": "Deep Ensemble x5 + Conformal Prediction (Nested CV)",
+        "R2_mean": float(np.mean(r2_scores)) if r2_scores else 0,
+        "R2_std": float(np.std(r2_scores)) if r2_scores else 0,
+        "MAE_mean": float(np.mean(mae_scores)) if mae_scores else 0,
+        "MAE_std": float(np.std(mae_scores)) if mae_scores else 0,
+        "coverage_90_mean": float(np.mean(coverages)) if coverages else 0,
+        "avg_interval_width_mean": float(np.mean(widths)) if widths else 0,
+        "n_folds": len(r2_scores),
         "model": "DeepEnsemble(TandemM2M) x5",
     }
     _save_result("E14", result)
-    print(f"E14 Result: R2={result['R2']:.4f}, Coverage={coverage:.3f}, Width={avg_width:.1f}K")
+    r2_msg = f"R2={result['R2_mean']:.4f} +/- {result['R2_std']:.4f}"
+    cov_msg = f"Coverage={result['coverage_90_mean']:.3f}"
+    print(f"E14 Result: {r2_msg}, {cov_msg}")
     return result
 
 
@@ -558,13 +587,17 @@ def run_e15(device="cuda"):
                 all_true.extend(true.tolist())
 
         if len(all_true) > 1:
-            r2_scores.append(r2_score(all_true, all_preds))
-            mae_scores.append(mean_absolute_error(all_true, all_preds))
-
-        print(f"Fold {fold_idx+1}/15: R2={r2_scores[-1]:.4f}")
+            r2 = r2_score(all_true, all_preds)
+            mae = mean_absolute_error(all_true, all_preds)
+            r2_scores.append(r2)
+            mae_scores.append(mae)
+            print(f"Fold {fold_idx+1}/15: R2={r2:.4f}")
+        else:
+            print(f"Fold {fold_idx+1}/15: skipped (too few test samples)")
 
     result = {
         "experiment": "E15",
+        "pretrain_used": pretrain_loader is not None,
         "description": "M2M-Deep full framework (pretrain + finetune + Nested CV)",
         "R2_mean": float(np.mean(r2_scores)),
         "R2_std": float(np.std(r2_scores)),

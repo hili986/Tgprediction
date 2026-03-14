@@ -150,6 +150,29 @@ class TandemM2M(nn.Module):
         for param in self.parameters():
             param.requires_grad = True
 
+    def set_dropout(self, rate: float):
+        """Set dropout rate across all sub-modules.
+
+        Updates dropout in:
+            - GNN attention layers (GATConv.dropout)
+            - GNN inter-layer dropout (PhysicsGAT.dropout)
+            - Fusion MLP dropout layers
+
+        Args:
+            rate: New dropout rate (0.0 to 1.0).
+        """
+        # GNN inter-layer dropout
+        self.gnn.dropout.p = rate
+
+        # GATConv attention dropout
+        for conv in [self.gnn.conv1, self.gnn.conv2, self.gnn.conv3]:
+            conv.dropout = rate
+
+        # MLP dropout layers (positions 2 and 5 in Sequential)
+        for module in self.mlp:
+            if isinstance(module, nn.Dropout):
+                module.p = rate
+
     def count_parameters(self) -> dict:
         """Count trainable and total parameters.
 
