@@ -52,7 +52,7 @@ class TgPretrainer:
         device: str = "cuda",
         lr_pretrain: float = 1e-3,
         lr_finetune: float = 1e-4,
-        weight_decay: float = 1e-4,
+        weight_decay_pretrain: float = 1e-4,
         weight_decay_finetune: float = 1e-3,
         freeze_layers: int = 2,
         tabular_dim: int = 56,
@@ -63,7 +63,7 @@ class TgPretrainer:
         self.device = device
         self.lr_pretrain = lr_pretrain
         self.lr_finetune = lr_finetune
-        self.weight_decay_pretrain = weight_decay
+        self.weight_decay_pretrain = weight_decay_pretrain
         self.weight_decay_finetune = weight_decay_finetune
         self.freeze_layers = freeze_layers
         self.tabular_dim = tabular_dim

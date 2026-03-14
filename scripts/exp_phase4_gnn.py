@@ -4,7 +4,7 @@ Phase 4 GNN 实验 — 在 A800 GPU 上运行
 
 Experiments:
     E9:  Tandem-M2M, no pretrain (GNN baseline)
-    E10: + pretrain on ~59K data
+    E10: + pretrain on external data
     E11: VPD-Deep (GNN 3-mer embedding)
     E12: PPF+VPD+GNN(64d) -> GBR fusion
     E13: + multitask (Tg+density+sol)
@@ -88,27 +88,29 @@ def run_e9(device="cuda"):
 
 
 def run_e10(device="cuda"):
-    """E10: Tandem-M2M + pretrain on ~59K data."""
+    """E10: Tandem-M2M + pretrain on external data."""
     import torch
     from src.features.feature_pipeline import build_dataset_v2
     from src.data.external_datasets import build_extended_dataset
     from src.ml.gnn_evaluation import nested_cv_gnn
 
     print("=" * 60)
-    print("E10: Tandem-M2M + pretrain (~59K)")
+    print("E10: Tandem-M2M + pretrain (external data)")
     print("=" * 60)
 
     X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
 
     # Build pretrain data from external sources
     try:
-        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(layer="M2M")
+        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(
+            layer="M2M", include_bicerano=False,
+        )
         pretrain_data = {
             "smiles": ext_smiles,
             "y": ext_y.tolist(),
             "tabular": ext_X,
         }
-        print(f"Pretrain data: {len(ext_smiles)} polymers")
+        print(f"Pretrain data: {len(ext_smiles)} external polymers (Bicerano excluded)")
     except Exception as e:
         print(f"Warning: Cannot load pretrain data: {e}")
         print("Running without pretrain (same as E9)")
@@ -178,7 +180,7 @@ def run_e11(device="cuda"):
         tabular_dim = X_valid.shape[1]
         model = TandemM2M(in_dim=25, tabular_dim=tabular_dim)
         train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
-        trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim)
+        trainer = TgPretrainer(model, device=device, tabular_dim=tabular_dim, freeze_layers=0)
         trainer.finetune(train_loader, epochs=30, patience=10)
 
         # Extract embeddings for train and test
@@ -253,13 +255,15 @@ def run_e12(device="cuda"):
     pretrain_loader = None
     try:
         from src.data.external_datasets import build_extended_dataset
-        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(layer="M2M")
+        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(
+            layer="M2M", include_bicerano=False,
+        )
         ext_graphs, ext_valid_idx = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
         ext_X_valid = ext_X[ext_valid_idx]
         for i, g in enumerate(ext_graphs):
             g.tabular = torch.tensor(ext_X_valid[i], dtype=torch.float).unsqueeze(0)
         pretrain_loader = DataLoader(ext_graphs, batch_size=256, shuffle=True)
-        print(f"Pretrain data: {len(ext_graphs)} external polymers")
+        print(f"Pretrain data: {len(ext_graphs)} external polymers (Bicerano excluded)")
     except Exception as e:
         print(f"Pretrain data unavailable: {e}")
 
@@ -340,7 +344,7 @@ def run_e13(device="cuda"):
     print("E13: Multitask GNN (Tg + auxiliary tasks)")
     print("=" * 60)
 
-    X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
+    _, y, names, _, smiles_list = build_dataset_v2(layer="M2M")
     graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
     y_valid = y[valid_idx]
 
@@ -364,6 +368,10 @@ def run_e13(device="cuda"):
         # On Bicerano alone, this effectively trains single-task Tg.
         best_loss = float("inf")
         epochs_no_improve = 0
+        # NOTE: Early stopping on train loss only (no separate val set within fold).
+        # This is a known limitation — train-loss early stopping may overfit.
+        # For Bicerano 304 with 15-fold CV, creating a val split would leave too few
+        # samples per fold. Accept this trade-off for E13.
         patience = 10
         best_state = None
 
@@ -467,17 +475,19 @@ def run_e14(device="cuda"):
 
     tabular_dim = X_valid.shape[1]
 
-    # Try loading pretrain data (design doc: ~59K external data)
+    # Try loading pretrain data (external sources, Bicerano excluded)
     pretrain_loader = None
     try:
         from src.data.external_datasets import build_extended_dataset
-        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(layer="M2M")
+        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(
+            layer="M2M", include_bicerano=False,
+        )
         ext_graphs, ext_valid_idx = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
         ext_X_valid = ext_X[ext_valid_idx]
         for i, g in enumerate(ext_graphs):
             g.tabular = torch.tensor(ext_X_valid[i], dtype=torch.float).unsqueeze(0)
         pretrain_loader = DataLoader(ext_graphs, batch_size=256, shuffle=True)
-        print(f"Pretrain data: {len(ext_graphs)} external polymers")
+        print(f"Pretrain data: {len(ext_graphs)} external polymers (Bicerano excluded)")
     except Exception as e:
         print(f"Pretrain data unavailable: {e}")
 
@@ -597,13 +607,15 @@ def run_e15(device="cuda"):
     pretrain_loader = None
     try:
         from src.data.external_datasets import build_extended_dataset
-        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(layer="M2M")
+        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(
+            layer="M2M", include_bicerano=False,
+        )
         ext_graphs, ext_valid_idx = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
         ext_X_valid = ext_X[ext_valid_idx]
         for i, g in enumerate(ext_graphs):
             g.tabular = torch.tensor(ext_X_valid[i], dtype=torch.float).unsqueeze(0)
         pretrain_loader = DataLoader(ext_graphs, batch_size=256, shuffle=True)
-        print(f"Pretrain data: {len(ext_graphs)} polymers")
+        print(f"Pretrain data: {len(ext_graphs)} external polymers (Bicerano excluded)")
     except Exception as e:
         print(f"Pretrain data unavailable: {e}")
 

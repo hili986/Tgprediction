@@ -45,7 +45,10 @@ class DeepEnsembleTg:
         self.n_models = n_models
         self.device = device
         self.tabular_dim = tabular_dim
-        self.models = [model_fn().to(device) for _ in range(n_models)]
+        self.models = []
+        for i in range(n_models):
+            torch.manual_seed(42 + i)
+            self.models.append(model_fn().to(device))
         self.trainers = [
             TgPretrainer(model, device=device, tabular_dim=tabular_dim)
             for model in self.models

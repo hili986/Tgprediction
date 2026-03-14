@@ -192,7 +192,7 @@ def _compute_edge_features(mol: Chem.Mol) -> Tuple[np.ndarray, np.ndarray]:
         # Undirected: add both directions
         edges_src.extend([i, j])
         edges_dst.extend([j, i])
-        edge_attrs.extend([feat, feat])
+        edge_attrs.extend([feat, feat.copy()])
 
     if not edges_src:
         return (
