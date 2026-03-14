@@ -295,7 +295,7 @@ class TgPretrainer:
             path: File path to checkpoint.
         """
         try:
-            checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+            checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         except TypeError:
             # PyTorch < 2.0 doesn't support weights_only
             checkpoint = torch.load(path, map_location=self.device)

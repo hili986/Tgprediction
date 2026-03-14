@@ -31,6 +31,21 @@ def _ensure_results_dir():
     os.makedirs("results/phase4", exist_ok=True)
 
 
+def _extract_embeddings(graph_list, model, device):
+    """Extract GNN embeddings for a list of graphs using a trained model."""
+    import torch
+    embs = []
+    with torch.no_grad():
+        for g in graph_list:
+            g_dev = g.to(device)
+            g_dev.batch = torch.zeros(
+                g_dev.x.size(0), dtype=torch.long, device=device
+            )
+            emb = model.get_embedding(g_dev).cpu().numpy()
+            embs.append(emb.squeeze())
+    return np.array(embs)
+
+
 def _save_result(exp_id: str, result: dict):
     _ensure_results_dir()
     path = f"results/phase4/exp_{exp_id}.json"
@@ -161,28 +176,14 @@ def run_e11(device="cuda"):
 
         # Train GNN on train split only (no leakage)
         model = TandemM2M(in_dim=25, tabular_dim=X_valid.shape[1])
-        model.to(device)
         train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
         trainer = TgPretrainer(model, device=device, lr_pretrain=1e-3)
         trainer.pretrain(train_loader, epochs=30)
 
         # Extract embeddings for train and test
         model.eval()
-
-        def _extract_embeddings(graph_list):
-            embs = []
-            with torch.no_grad():
-                for g in graph_list:
-                    g_dev = g.to(device)
-                    g_dev.batch = torch.zeros(
-                        g_dev.x.size(0), dtype=torch.long, device=device
-                    )
-                    emb = model.get_embedding(g_dev).cpu().numpy()
-                    embs.append(emb.squeeze())
-            return np.array(embs)
-
-        train_emb = _extract_embeddings(train_graphs)
-        test_emb = _extract_embeddings(test_graphs)
+        train_emb = _extract_embeddings(train_graphs, model, device)
+        test_emb = _extract_embeddings(test_graphs, model, device)
 
         X_train_combined = np.hstack([X_valid[train_idx], train_emb])
         X_test_combined = np.hstack([X_valid[test_idx], test_emb])
@@ -277,21 +278,8 @@ def run_e12(device="cuda"):
 
         # Extract embeddings using fold-specific model
         model.eval()
-
-        def _extract_embeddings(graph_list):
-            embs = []
-            with torch.no_grad():
-                for g in graph_list:
-                    g_dev = g.to(device)
-                    g_dev.batch = torch.zeros(
-                        g_dev.x.size(0), dtype=torch.long, device=device
-                    )
-                    emb = model.get_embedding(g_dev).cpu().numpy()
-                    embs.append(emb.squeeze())
-            return np.array(embs)
-
-        train_emb = _extract_embeddings(train_graphs)
-        test_emb = _extract_embeddings(test_graphs)
+        train_emb = _extract_embeddings(train_graphs, model, device)
+        test_emb = _extract_embeddings(test_graphs, model, device)
 
         X_train_fused = np.hstack([X_valid[train_idx], train_emb])
         X_test_fused = np.hstack([X_valid[test_idx], test_emb])

@@ -182,8 +182,8 @@ def nested_cv_gnn(
             "R2": r2,
             "MAE": mae,
             "RMSE": rmse,
-            "n_train": len(train_idx),
-            "n_test": len(test_idx),
+            "n_train": len(train_graphs),
+            "n_test": len(test_graphs),
         })
 
         print(

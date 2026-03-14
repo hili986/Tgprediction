@@ -15,7 +15,7 @@ Edge features (6-dim):
 
 Public API:
     smiles_to_graph(smiles, n_repeat=3, physics_features=True) -> Data
-    batch_smiles_to_graphs(smiles_list, ...) -> List[Data]
+    batch_smiles_to_graphs(smiles_list, ...) -> Tuple[List[Data], List[int]]
 """
 
 from typing import Dict, List, Optional, Set, Tuple

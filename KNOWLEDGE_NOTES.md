@@ -539,3 +539,54 @@
 **推荐资源**：
 - RDKit Getting Started: https://www.rdkit.org/docs/GettingStartedInPython.html
 - Google Data Cascades Paper (NeurIPS 2021): https://research.google/pubs/everyone-wants-to-do-the-model-work-not-the-data-work/
+
+### ML 管道中的数据泄漏 (Data Leakage in ML Pipelines) — 2026-03-14
+**来源**：Level 2 (深度讲解)
+**触发场景**：GNN 代码审查发现 E12 实验中 GNN 在 CV 分割前就用全量数据训练，导致测试集泄漏
+**分析过程**：
+- E12 原始代码在 CV 循环外训练 GNN（全 304 条），然后提取嵌入喂给 GBR 做 CV
+- 这意味着 GNN 嵌入"见过"测试集分子 → GBR 的 CV 分数虚高
+- 修复：每个 fold 内独立创建/训练 GNN（pretrain 用外部数据 → finetune 用 train fold → 提取嵌入）
+**核心要点**：
+- 数据泄漏三大类型：(1) 特征泄漏（用到未来信息）(2) 预处理泄漏（scaler 拟合全量数据）(3) 表征泄漏（encoder/GNN 在分割前训练）
+- 第(3)类最隐蔽：预训练模型如果用了目标数据，其表征就包含测试集信息
+- 安全原则：任何"学习型"组件（scaler、feature selector、encoder、GNN）都必须在 CV 循环内重新训练
+- 外部数据预训练是安全的（与 Bicerano 304 无重叠），但微调必须只用 train fold
+**相关概念**：Nested CV, Information Leakage, Representation Learning, Transfer Learning
+**推荐资源**：
+- Cawley & Talbot (2010): "On Over-fitting in Model Selection" — 经典数据泄漏论文
+- scikit-learn docs: https://scikit-learn.org/stable/common_pitfalls.html#data-leakage
+
+### 索引对齐模式 (Index Alignment in Data Pipelines) — 2026-03-14
+**来源**：Level 2 (深度讲解)
+**触发场景**：`batch_smiles_to_graphs` 过滤无效 SMILES 后返回 `(graphs, valid_indices)`，下游数组必须对齐
+**分析过程**：
+- 原始 API 只返回 graphs 列表，但无效 SMILES 被静默跳过 → graphs[i] 不再对应 y[i]
+- 修复后返回 `(graphs, valid_idx)` 元组，调用方用 `y_valid = y[valid_idx]` 重新对齐
+- 所有 6 个调用点（gnn_evaluation.py ×3, exp_phase4_gnn.py E12/E13/E14/E15）全部更新
+**核心要点**：
+- 数据过滤操作（跳过无效项）会打破数组索引的一一对应关系
+- 解决方案：返回有效索引列表，让调用方显式对齐所有相关数组
+- 这是 "parallel arrays" 反模式的典型问题：多个数组靠位置隐式关联，一旦一个被过滤就全部错位
+- 更好的设计：返回结构化数据（dataclass/dict），而非依赖位置对齐
+**相关概念**：Parallel Arrays Anti-pattern, Data Alignment, API Design, Defensive Programming
+**推荐资源**：
+- Martin Fowler: "Refactoring" — Replace Parallel Arrays with Objects 重构手法
+
+### Physics-Embedded GNN 架构设计 — 2026-03-14
+**来源**：Level 2 (深度讲解)
+**触发场景**：实现 Tandem-M2M GNN 架构（PhysicsGAT + 表格特征融合 + 可学习残差权重）
+**分析过程**：
+- 传统 GNN 纯数据驱动，丢失物理先验 → 在原子特征中嵌入物理信息（柔性键、主链/侧链标记、位阻等）
+- GRIN 池化（只取中间重复单元）解决聚合物的无限链问题：3-RU 寡聚体的中间单元已包含完整化学环境
+- Tandem 架构：Tg = Tg_baseline + α × GNN_residual，α 可学习，让模型学残差而非绝对值
+- 两阶段训练（大量外部数据预训练 → 小数据集微调 + 冻结早期层）缓解 304 条数据的过拟合
+**核心要点**：
+- 物理先验嵌入方式：(1) 特征级（原子/边特征含物理量）(2) 架构级（池化方式、残差连接）(3) 约束级（单调约束）
+- GAT (Graph Attention Network) 比 GCN 更适合异质原子：注意力权重自动学习哪些邻居更重要
+- 预训练-微调范式在小数据场景至关重要：59K 外部数据学通用化学表征，304 条精标数据学 Tg 特异性
+- 冻结早期层保留通用表征，只微调后层 + MLP 头，防止"灾难性遗忘"
+**相关概念**：Graph Attention Network, Transfer Learning, Residual Learning, Physics-Informed ML
+**推荐资源**：
+- Veličković et al. (2018): "Graph Attention Networks" — GAT 原始论文
+- Hu et al. (2020): "Strategies for Pre-training Graph Neural Networks" — GNN 预训练策略
