@@ -114,7 +114,7 @@ def main():
 
     # ---- Build experimental data with SMILES ----
     _safe_print("=== Building experimental data ===")
-    X_exp, y_exp, names_exp, feat_names = build_dataset_v2(layer="L1", verbose=True)
+    X_exp, y_exp, names_exp, feat_names, _ = build_dataset_v2(layer="L1", verbose=True)
     _safe_print(f"  Experimental: {X_exp.shape}")
 
     # Get exp SMILES (same order as build_dataset_v2)

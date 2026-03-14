@@ -322,7 +322,7 @@ def main():
 
     # ---- Build data ----
     _safe_print("=== Building data ===")
-    X_exp, y_exp, _, _ = build_dataset_v2(layer="L1H", verbose=True)
+    X_exp, y_exp, _, _, _ = build_dataset_v2(layer="L1H", verbose=True)
     X_bridge, y_bridge, _, _ = build_bridge_dataset(
         layer="L1", include_hbond=True, verbose=True
     )

@@ -730,7 +730,7 @@ class TestBuildExtendedDataset(unittest.TestCase):
                 ],
             ),
         }):
-            X, y, names, feat_names = build_extended_dataset(
+            X, y, names, feat_names, smiles_out = build_extended_dataset(
                 layer="L1", verbose=False, include_bicerano=True
             )
 
@@ -739,6 +739,7 @@ class TestBuildExtendedDataset(unittest.TestCase):
         self.assertEqual(len(feat_names), 3)
         self.assertEqual(X.shape[1], 3)
         self.assertEqual(len(y), len(names))
+        self.assertEqual(len(smiles_out), len(names))
 
     @patch("src.data.external_datasets.load_all_external")
     def test_smoke_no_bicerano(self, mock_load_ext):
@@ -755,12 +756,13 @@ class TestBuildExtendedDataset(unittest.TestCase):
                 get_feature_names=mock_feat_names,
             ),
         }):
-            X, y, names, feat_names = build_extended_dataset(
+            X, y, names, feat_names, smiles_out = build_extended_dataset(
                 layer="L0", verbose=False, include_bicerano=False
             )
 
         self.assertIsInstance(X, np.ndarray)
         self.assertEqual(len(y), len(names))
+        self.assertEqual(len(smiles_out), len(names))
 
 
 # ---------------------------------------------------------------------------

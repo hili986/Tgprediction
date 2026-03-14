@@ -23,7 +23,7 @@ Removed sources (100% contained in NeurIPS OPP):
 Public API:
     load_all_external(...)        -> List[Dict]  (homopolymers)
     load_copolymer_data(...)      -> List[Dict]  (copolymers)
-    build_extended_dataset(...)   -> (X, y, names, feature_names)
+    build_extended_dataset(...)   -> (X, y, names, feature_names, smiles_list)
 """
 
 import csv
@@ -610,7 +610,7 @@ def build_extended_dataset(
     include_bicerano: bool = True,
     include_openpoly: bool = False,
     verbose: bool = True,
-) -> Tuple[np.ndarray, np.ndarray, List[str], List[str]]:
+) -> Tuple[np.ndarray, np.ndarray, List[str], List[str], List[str]]:
     """Build extended feature matrix from external datasets + Bicerano.
 
     Same return format as build_dataset_v2() for drop-in compatibility.
@@ -627,7 +627,7 @@ def build_extended_dataset(
         verbose: Print dataset info.
 
     Returns:
-        (X, y, names, feature_names)
+        (X, y, names, feature_names, smiles_list)
     """
     from src.features.feature_pipeline import (
         compute_features,
@@ -688,6 +688,7 @@ def build_extended_dataset(
     X_list: List[np.ndarray] = []
     y_list: List[float] = []
     names: List[str] = []
+    smiles_out: List[str] = []
     skipped = 0
 
     for name, smiles, tg_k in entries:
@@ -699,6 +700,7 @@ def build_extended_dataset(
             X_list.append(x)
             y_list.append(tg_k)
             names.append(name)
+            smiles_out.append(smiles)
         except Exception as e:
             skipped += 1
             if verbose and skipped <= 3:
@@ -718,7 +720,7 @@ def build_extended_dataset(
         if skipped > 0:
             print(f"  Skipped: {skipped} polymers (feature extraction errors)")
 
-    return X, y, names, feat_names
+    return X, y, names, feat_names, smiles_out
 
 
 # ---------------------------------------------------------------------------

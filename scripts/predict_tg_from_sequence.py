@@ -56,7 +56,7 @@ def train_model(bridge_weight=0.8, verbose=True):
     """
     if verbose:
         print("[1/3] 加载实验数据 (Bicerano 304 + H-bond features)...")
-    X_exp, y_exp, _, feat_names = build_dataset_v2(layer="L1H", verbose=verbose)
+    X_exp, y_exp, _, feat_names, _ = build_dataset_v2(layer="L1H", verbose=verbose)
 
     if verbose:
         print("[2/3] 加载桥梁聚合物数据 (205 entries)...")

@@ -250,11 +250,11 @@ def main():
 
     # ---- 1. Build experimental data (L1H = L1 + hbond) ----
     _safe_print("=== Building experimental data (L1H) ===")
-    X_exp, y_exp, names_exp, feat_names = build_dataset_v2(layer="L1H", verbose=True)
+    X_exp, y_exp, names_exp, feat_names, _ = build_dataset_v2(layer="L1H", verbose=True)
 
     # Also build L1 baseline for comparison
     _safe_print("\n=== Building experimental data (L1, no hbond) ===")
-    X_exp_l1, y_exp_l1, _, _ = build_dataset_v2(layer="L1", verbose=True)
+    X_exp_l1, y_exp_l1, _, _, _ = build_dataset_v2(layer="L1", verbose=True)
 
     # ---- 2. Build bridge polymer data ----
     _safe_print("\n=== Building bridge polymer data (L1H) ===")

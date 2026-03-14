@@ -9,7 +9,7 @@ Layered descriptor strategy (低成本计算描述符调研.md S9):
 
 Public API:
     compute_features(smiles, bigsmiles, layer, morgan_bits) -> np.ndarray
-    build_dataset_v2(layer, morgan_bits) -> (X, y, names, feature_names)
+    build_dataset_v2(layer, morgan_bits) -> (X, y, names, feature_names, smiles_list)
     get_feature_names(layer, morgan_bits) -> list of feature names
 """
 
@@ -168,7 +168,7 @@ def build_dataset_v2(
     layer: str = "L1",
     morgan_bits: int = 1024,
     verbose: bool = True,
-) -> Tuple[np.ndarray, np.ndarray, List[str], List[str]]:
+) -> Tuple[np.ndarray, np.ndarray, List[str], List[str], List[str]]:
     """Build feature matrix and target vector from Bicerano dataset.
     从 Bicerano 数据集构建特征矩阵和目标向量。
 
@@ -178,17 +178,19 @@ def build_dataset_v2(
         verbose: Print dataset info.
 
     Returns:
-        (X, y, names, feature_names) where:
+        (X, y, names, feature_names, smiles_list) where:
             X: np.ndarray of shape (n_samples, n_features)
             y: np.ndarray of shape (n_samples,)
             names: list of polymer names
             feature_names: list of feature name strings
+            smiles_list: list of SMILES strings (same order as X/y)
     """
     feat_names = get_feature_names(layer, morgan_bits)
 
     X_list: List[np.ndarray] = []
     y_list: List[float] = []
     names: List[str] = []
+    smiles_out: List[str] = []
     skipped = 0
 
     for name, smiles, bigsmiles, tg_k in BICERANO_DATA:
@@ -200,6 +202,7 @@ def build_dataset_v2(
             X_list.append(x)
             y_list.append(float(tg_k))
             names.append(name)
+            smiles_out.append(smiles)
         except Exception:
             skipped += 1
 
@@ -211,4 +214,4 @@ def build_dataset_v2(
         if skipped > 0:
             print(f"  Skipped: {skipped} polymers (feature extraction errors)")
 
-    return X, y, names, feat_names
+    return X, y, names, feat_names, smiles_out

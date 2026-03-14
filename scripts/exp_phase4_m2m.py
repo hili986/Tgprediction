@@ -86,7 +86,7 @@ GBR_PARAM_SPACE = {
 def run_e1():
     """E1: L1H 34d + GBR baseline."""
     _safe_print("\n=== E1: L1H 34d + GBR (baseline) ===")
-    X, y, names, feat_names = build_dataset_v2(layer="L1H")
+    X, y, names, feat_names, _ = build_dataset_v2(layer="L1H")
 
     result = nested_cv(
         X, y,
@@ -104,7 +104,7 @@ def run_e1():
 def run_e2():
     """E2: M2M-P 44d + GBR (PPF only)."""
     _safe_print("\n=== E2: M2M-P 44d + GBR (PPF only) ===")
-    X, y, names, feat_names = build_dataset_v2(layer="M2M-P")
+    X, y, names, feat_names, _ = build_dataset_v2(layer="M2M-P")
 
     result = nested_cv(
         X, y,
@@ -122,7 +122,7 @@ def run_e2():
 def run_e3():
     """E3: M2M-V 46d + GBR (VPD only)."""
     _safe_print("\n=== E3: M2M-V 46d + GBR (VPD only) ===")
-    X, y, names, feat_names = build_dataset_v2(layer="M2M-V")
+    X, y, names, feat_names, _ = build_dataset_v2(layer="M2M-V")
 
     result = nested_cv(
         X, y,
@@ -140,7 +140,7 @@ def run_e3():
 def run_e4():
     """E4: M2M 56d + GBR (PPF + VPD combined)."""
     _safe_print("\n=== E4: M2M 56d + GBR (full M2M) ===")
-    X, y, names, feat_names = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, _ = build_dataset_v2(layer="M2M")
 
     result = nested_cv(
         X, y,
@@ -158,7 +158,7 @@ def run_e4():
 def run_e5():
     """E5: M2M-PV 22d + GBR (pure physics features)."""
     _safe_print("\n=== E5: M2M-PV 22d + GBR (pure physics) ===")
-    X, y, names, feat_names = build_dataset_v2(layer="M2M-PV")
+    X, y, names, feat_names, _ = build_dataset_v2(layer="M2M-PV")
 
     result = nested_cv(
         X, y,
@@ -176,7 +176,7 @@ def run_e5():
 def run_e6():
     """E6: M2M 56d + constrained GBR."""
     _safe_print("\n=== E6: M2M 56d + Constrained GBR ===")
-    X, y, names, feat_names = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, _ = build_dataset_v2(layer="M2M")
 
     # Build constrained model
     model = build_constrained_gbr(feat_names)
@@ -237,7 +237,7 @@ def run_e6():
 def run_e7():
     """E7: M2M 56d + HRL."""
     _safe_print("\n=== E7: M2M 56d + HRL ===")
-    X, y, names, feat_names = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, _ = build_dataset_v2(layer="M2M")
 
     result = nested_cv_hrl(X, y, feat_names)
     result["experiment"] = "E7"
@@ -257,7 +257,7 @@ def run_e8():
         _safe_print("  MAPIE not installed, skipping E8. pip install mapie")
         return None
 
-    X, y, names, feat_names = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, _ = build_dataset_v2(layer="M2M")
 
     from sklearn.model_selection import RepeatedKFold, train_test_split
     outer_cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)

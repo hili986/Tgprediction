@@ -63,7 +63,7 @@ def run_e9(device="cuda"):
     print("E9: Tandem-M2M GNN baseline (no pretrain)")
     print("=" * 60)
 
-    X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
 
     result = nested_cv_gnn(
         smiles_list=smiles_list,
@@ -98,11 +98,11 @@ def run_e10(device="cuda"):
     print("E10: Tandem-M2M + pretrain (~59K)")
     print("=" * 60)
 
-    X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
 
     # Build pretrain data from external sources
     try:
-        ext_X, ext_y, _, ext_smiles = build_extended_dataset(layer="M2M")
+        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(layer="M2M")
         pretrain_data = {
             "smiles": ext_smiles,
             "y": ext_y.tolist(),
@@ -151,7 +151,7 @@ def run_e11(device="cuda"):
     print("E11: VPD-Deep (GNN 3-mer embedding, per-fold)")
     print("=" * 60)
 
-    X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
 
     # Build graphs with index tracking
     graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
@@ -229,7 +229,7 @@ def run_e12(device="cuda"):
     print("E12: PPF+VPD+GNN(64d) -> GBR fusion (per-fold)")
     print("=" * 60)
 
-    X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
 
     # Build graphs with index tracking
     graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
@@ -244,7 +244,7 @@ def run_e12(device="cuda"):
     pretrain_loader = None
     try:
         from src.data.external_datasets import build_extended_dataset
-        ext_X, ext_y, _, ext_smiles = build_extended_dataset(layer="M2M")
+        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(layer="M2M")
         ext_graphs, ext_valid_idx = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
         ext_X_valid = ext_X[ext_valid_idx]
         for i, g in enumerate(ext_graphs):
@@ -323,7 +323,7 @@ def run_e13(device="cuda"):
     print("E13: Multitask GNN (Tg + auxiliary tasks)")
     print("=" * 60)
 
-    X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
     graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
     y_valid = y[valid_idx]
 
@@ -401,7 +401,7 @@ def run_e14(device="cuda"):
     print("E14: Deep Ensemble x5 + Conformal")
     print("=" * 60)
 
-    X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
     graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
     X_valid = X[valid_idx]
 
@@ -492,13 +492,13 @@ def run_e15(device="cuda"):
     print("E15: M2M-Deep Full Framework")
     print("=" * 60)
 
-    X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
+    X, y, names, feat_names, smiles_list = build_dataset_v2(layer="M2M")
 
     # Try to load pretrain data
     pretrain_loader = None
     try:
         from src.data.external_datasets import build_extended_dataset
-        ext_X, ext_y, _, ext_smiles = build_extended_dataset(layer="M2M")
+        ext_X, ext_y, _, _, ext_smiles = build_extended_dataset(layer="M2M")
         ext_graphs, ext_valid_idx = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
         ext_X_valid = ext_X[ext_valid_idx]
         for i, g in enumerate(ext_graphs):
