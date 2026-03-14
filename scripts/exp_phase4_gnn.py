@@ -35,6 +35,7 @@ def _extract_embeddings(graph_list, model, device, batch_size=64):
     """Extract GNN embeddings for a list of graphs using batch inference."""
     import torch
     from torch_geometric.loader import DataLoader
+    model.eval()
     embs = []
     loader = DataLoader(graph_list, batch_size=batch_size, shuffle=False)
     with torch.no_grad():
@@ -75,7 +76,7 @@ def run_e9(device="cuda"):
         finetune_epochs=50,
         patience=10,
         device=device,
-        gnn_config={"in_dim": 25, "gnn_hidden": 128, "gnn_out": 64},
+        gnn_config={"in_dim": 25, "gnn_hidden": 128, "gnn_out": 64, "edge_dim": 6},
     )
 
     result["experiment"] = "E9"

@@ -122,7 +122,7 @@ class DeepEnsembleTg:
             model.eval()
             pred = model(data.to(self.device), tabular.to(self.device),
                         baseline.to(self.device) if baseline is not None else None)
-            all_preds.append(pred.squeeze().cpu().numpy())
+            all_preds.append(np.atleast_1d(pred.squeeze().cpu().numpy()))
 
         all_preds = np.array(all_preds)  # [n_models, B]
         mean_pred = all_preds.mean(axis=0)
@@ -150,8 +150,8 @@ class DeepEnsembleTg:
             baseline = batch.baseline if hasattr(batch, "baseline") else None
 
             mean_pred, _, _ = self.predict(batch, tabular, baseline)
-            y_true = batch.y.squeeze().cpu().numpy()
-            residuals.extend(np.abs(y_true - mean_pred).tolist())
+            y_true = np.atleast_1d(batch.y.squeeze().cpu().numpy())
+            residuals.extend(np.atleast_1d(np.abs(y_true - mean_pred)).tolist())
 
         residuals = np.array(residuals)
         n = len(residuals)
