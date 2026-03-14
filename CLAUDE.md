@@ -13,12 +13,14 @@
 ## 项目结构
 ```
 src/
-  data/           → 数据集 (bicerano_tg_dataset.py)
-  features/       → 特征工程 (afsordeh, rdkit, hbond, pipeline, selection)
-  ml/             → 模型 (sklearn_models, evaluation, experiment_v2)
+  data/           → 数据集 (bicerano_tg_dataset.py, external_datasets.py)
+  features/       → 特征工程 (afsordeh, rdkit, hbond, pipeline, physical_proxy, virtual_polymerization)
+  ml/             → 模型 (sklearn_models, evaluation, constrained_gbr, hierarchical_model, gnn_evaluation)
+  gnn/            → GNN 子包 (graph_builder, physics_gat, tandem_m2m, pretrainer, multitask, ensemble)
   analysis/       → 分析 (shap, ablation, visualization)
   bigsmiles/      → BigSMILES 工具链 (已完成, 不修改)
 tests/            → 测试
+scripts/          → 实验脚本 (exp_phase4_m2m.py, exp_phase4_gnn.py)
 data/             → 原始数据文件
 docs/plans/       → 实验计划
 docs/research/    → 6 份调研报告
@@ -48,6 +50,11 @@ results/          → 实验输出 (phase1-4/)
 | `src/features/hbond_features.py` | `tests/test_hbond_features.py` |
 | `src/ml/evaluation.py` | `tests/test_evaluation.py` |
 | `src/data/fox_copolymer_generator.py` | `tests/test_fox_generator.py` |
+| `src/features/physical_proxy.py` | `tests/test_physical_proxy.py` |
+| `src/features/virtual_polymerization.py` | `tests/test_virtual_poly.py` |
+| `src/ml/hierarchical_model.py` | `tests/test_hierarchical.py` |
+| `src/gnn/graph_builder.py` | `tests/test_graph_builder.py` |
+| `src/gnn/tandem_m2m.py` | `tests/test_tandem_m2m.py` (requires PyG) |
 
 ## 编码规范
 - 纯函数优先, 不可变数据
