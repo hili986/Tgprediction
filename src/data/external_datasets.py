@@ -157,7 +157,8 @@ def _load_polymetrix() -> List[Dict]:
 def _load_neurips_opp(quality_filter: bool = True) -> List[Dict]:
     """Load NeurIPS OPP 2025 dataset with quality filtering.
 
-    Raw: 17,330 entries (Tg in Celsius).
+    Raw: 17,330 entries.
+    CSV columns: PSMILES, Tg_K (already in Kelvin), reliability, source, ...
     Quality issues found in investigation:
         - 6.2% (1,072) are non-polymer small molecules (no * markers)
         - 11.1% (1,920) have >2 decimal places (likely ML predictions)
@@ -175,22 +176,28 @@ def _load_neurips_opp(quality_filter: bool = True) -> List[Dict]:
     filtered_counts = {"non_polymer": 0, "predicted": 0, "parse_fail": 0}
 
     for r in rows:
-        smiles_raw = r.get("SMILES", "").strip()
-        tg_c_str = r.get("Tg", "")
-        if not smiles_raw or not tg_c_str:
+        # Support both column naming conventions
+        smiles_raw = (r.get("PSMILES") or r.get("SMILES", "")).strip()
+        tg_str = r.get("Tg_K") or r.get("Tg", "")
+        if not smiles_raw or not tg_str:
             continue
 
         if quality_filter:
             if not _is_polymer_smiles(smiles_raw):
                 filtered_counts["non_polymer"] += 1
                 continue
-            if _has_predicted_tg(tg_c_str):
+            if _has_predicted_tg(tg_str):
                 filtered_counts["predicted"] += 1
                 continue
 
         try:
-            tg_c = float(tg_c_str)
-            tg_k = tg_c + 273.15
+            tg_val = float(tg_str)
+            # Detect unit: if column is Tg_K, value is already Kelvin;
+            # if column is Tg, value is Celsius → convert
+            if "Tg_K" in r:
+                tg_k = tg_val
+            else:
+                tg_k = tg_val + 273.15
         except ValueError:
             filtered_counts["parse_fail"] += 1
             continue
@@ -199,9 +206,9 @@ def _load_neurips_opp(quality_filter: bool = True) -> List[Dict]:
             "smiles": _to_star_format(_normalize_psmiles(smiles_raw)),
             "tg_k": tg_k,
             "source": "neurips_opp",
-            "reliability": "",
-            "polymer_class": "",
-            "name": "",
+            "reliability": r.get("reliability", ""),
+            "polymer_class": r.get("polymer_class", ""),
+            "name": r.get("polymer_name", ""),
         })
     return results
 

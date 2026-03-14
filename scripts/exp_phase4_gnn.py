@@ -56,8 +56,6 @@ def _save_result(exp_id: str, result: dict):
 
 def run_e9(device="cuda"):
     """E9: Tandem-M2M, no pretrain — GNN baseline."""
-    import torch
-    from src.data.bicerano_tg_dataset import BICERANO_TG_DATA
     from src.features.feature_pipeline import build_dataset_v2
     from src.ml.gnn_evaluation import nested_cv_gnn
 
