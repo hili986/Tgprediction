@@ -80,6 +80,20 @@ def nested_cv_gnn(
     config = gnn_config or {}
     tabular_dim = tabular.shape[1] if tabular is not None else 1
 
+    # Strategy B: pre-filter invalid SMILES, then split on valid subset
+    # This ensures consistent fold assignments across all experiments (E9-E15)
+    all_graphs, valid_idx = batch_smiles_to_graphs(
+        smiles_list, y_list=y.tolist(),
+    )
+    valid_idx = np.array(valid_idx)
+    y_valid = y[valid_idx]
+    tabular_valid = tabular[valid_idx] if tabular is not None else None
+    smiles_valid = [smiles_list[i] for i in valid_idx]
+
+    n_filtered = len(smiles_list) - len(valid_idx)
+    if n_filtered > 0:
+        print(f"Pre-filtered {n_filtered} invalid SMILES, {len(valid_idx)} remain")
+
     cv = RepeatedKFold(n_splits=n_splits, n_repeats=n_repeats, random_state=random_state)
 
     fold_r2, fold_mae, fold_rmse = [], [], []
@@ -102,29 +116,21 @@ def nested_cv_gnn(
             pretrain_graphs, batch_size=batch_size_pretrain, shuffle=True,
         )
 
-    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y)):
-        # Build graphs for this fold
-        train_smiles = [smiles_list[i] for i in train_idx]
-        test_smiles = [smiles_list[i] for i in test_idx]
-        y_train, y_test = y[train_idx], y[test_idx]
+    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y_valid)):
+        # Graphs already built — select by fold index
+        train_graphs = [all_graphs[i] for i in train_idx]
+        test_graphs = [all_graphs[i] for i in test_idx]
 
-        train_graphs, train_valid_idx = batch_smiles_to_graphs(
-            train_smiles, y_list=y_train.tolist(),
-        )
-        test_graphs, test_valid_idx = batch_smiles_to_graphs(
-            test_smiles, y_list=y_test.tolist(),
-        )
-
-        # Attach tabular features if provided (using valid indices for alignment)
-        if tabular is not None:
-            tab_train = tabular[train_idx]
-            tab_test = tabular[test_idx]
+        # Attach tabular features if provided
+        if tabular_valid is not None:
             for i, g in enumerate(train_graphs):
-                orig_i = train_valid_idx[i]
-                g.tabular = torch.tensor(tab_train[orig_i], dtype=torch.float).unsqueeze(0)
+                g.tabular = torch.tensor(
+                    tabular_valid[train_idx[i]], dtype=torch.float
+                ).unsqueeze(0)
             for i, g in enumerate(test_graphs):
-                orig_i = test_valid_idx[i]
-                g.tabular = torch.tensor(tab_test[orig_i], dtype=torch.float).unsqueeze(0)
+                g.tabular = torch.tensor(
+                    tabular_valid[test_idx[i]], dtype=torch.float
+                ).unsqueeze(0)
 
         train_loader = DataLoader(
             train_graphs, batch_size=batch_size_finetune, shuffle=True,
