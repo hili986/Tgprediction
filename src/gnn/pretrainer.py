@@ -295,6 +295,8 @@ class TgPretrainer:
             path: File path to checkpoint.
         """
         try:
+            # SAFETY: Only load checkpoints we saved ourselves (save_checkpoint).
+            # Do NOT use this to load untrusted checkpoint files.
             checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         except TypeError:
             # PyTorch < 2.0 doesn't support weights_only

@@ -88,7 +88,13 @@ def nested_cv_gnn(
     valid_idx = np.array(valid_idx)
     y_valid = y[valid_idx]
     tabular_valid = tabular[valid_idx] if tabular is not None else None
-    smiles_valid = [smiles_list[i] for i in valid_idx]
+
+    # Attach tabular features once during pre-build (avoids per-fold mutation)
+    if tabular_valid is not None:
+        for i, g in enumerate(all_graphs):
+            g.tabular = torch.tensor(
+                tabular_valid[i], dtype=torch.float
+            ).unsqueeze(0)
 
     n_filtered = len(smiles_list) - len(valid_idx)
     if n_filtered > 0:
@@ -120,17 +126,6 @@ def nested_cv_gnn(
         # Graphs already built — select by fold index
         train_graphs = [all_graphs[i] for i in train_idx]
         test_graphs = [all_graphs[i] for i in test_idx]
-
-        # Attach tabular features if provided
-        if tabular_valid is not None:
-            for i, g in enumerate(train_graphs):
-                g.tabular = torch.tensor(
-                    tabular_valid[train_idx[i]], dtype=torch.float
-                ).unsqueeze(0)
-            for i, g in enumerate(test_graphs):
-                g.tabular = torch.tensor(
-                    tabular_valid[test_idx[i]], dtype=torch.float
-                ).unsqueeze(0)
 
         train_loader = DataLoader(
             train_graphs, batch_size=batch_size_finetune, shuffle=True,
