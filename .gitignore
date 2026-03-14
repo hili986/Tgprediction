@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Data files (too large / copyright)
+data/external/
+data/processed/
+*.npy
+*.pt
+*.pkl
+
+# Results (generated)
+results/
+
+# Environment
+.env
+.venv/
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Claude Code
+.claude/
+
+# Temp/generated files
+_write_report.py
+gen_report.py
+MEMORY.md
+
+# Stray files (empty, accidentally created)
+u8c03*
+u9a8c*
+聚合物Tg预测前沿方法深度调研-2026-03-14.md
+
+# PDF papers (copyright)
+*.pdf
+
+# Test logs
+tests/.claude-test-results.log

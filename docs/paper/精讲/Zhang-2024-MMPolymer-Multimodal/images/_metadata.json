@@ -1,0 +1,137 @@
+[
+  {
+    "label": "Figure 1",
+    "page": 2,
+    "caption": "Figure 1: The scheme of the proposed method. Here, the red arrows indicate the pipeline of our multimodal multitask pretraining\nparadigm, and the blue arrows indicate the pipeline of fine-tuning steps for downstream polymer property prediction tasks.\nThe blue modules are designed for 1D sequences (i.e., P-SMILES strings), and the red modules are designed for 3D conformations.\nThe modules shared by 1D and 3D representations are labeled in green.",
+    "is_table": false,
+    "bbox": [
+      15.0,
+      78.68557739257812,
+      597.0,
+      322.1287841796875
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Zhang-2024-MMPolymer-Multimodal/images\\figure_1.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Figure 2",
+    "page": 3,
+    "caption": "Figure 2: Left: the architecture of our 1D representation network, which takes polymer SMILES sequences (i.e., P-SMILES\nstrings) as input, and outputs corresponding 1D sequential representation. Right: the architecture of our 3D representation\nnetwork, which takes 3D conformation as input, and outputs corresponding 3D structural representation.",
+    "is_table": false,
+    "bbox": [
+      20.0,
+      5,
+      592.0,
+      262.9807891845703
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Zhang-2024-MMPolymer-Multimodal/images\\figure_2.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Figure 3",
+    "page": 4,
+    "caption": "Figure 3: Visualization of our \"Star Substitution\" strategy.",
+    "is_table": false,
+    "bbox": [
+      15.0,
+      15,
+      597.0,
+      229.7248077392578
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Zhang-2024-MMPolymer-Multimodal/images\\figure_3.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Figure 4",
+    "page": 7,
+    "caption": "Figure 4: t-SNE visualization of MMPolymer on eight polymer property datasets, where the color for each data point is\ndetermined by the corresponding ground truth (i.e., property label).",
+    "is_table": false,
+    "bbox": [
+      20.0,
+      125.71379089355469,
+      592.0,
+      614.94677734375
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Zhang-2024-MMPolymer-Multimodal/images\\figure_4.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 1",
+    "page": 6,
+    "caption": "Table 1: The summary of our datasets, where the pretrain-\ning dataset is unlabeled and the fine-tuning datasets are\nregression-type datasets with corresponding property labels.",
+    "is_table": true,
+    "bbox": [
+      20.0,
+      76.51496887207031,
+      301.0,
+      274.6370544433594
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Zhang-2024-MMPolymer-Multimodal/images\\table_1.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 2",
+    "page": 7,
+    "caption": "Table 2: The performance comparison of different methods on eight polymer property datasets, and the best result for each\npolymer property dataset has been bolded.",
+    "is_table": true,
+    "bbox": [
+      20.0,
+      76.54521942138672,
+      592.0,
+      591.9539794921875
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Zhang-2024-MMPolymer-Multimodal/images\\table_2.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 3",
+    "page": 8,
+    "caption": "Table 3: The performance improvement of MMPolymer-1D,\nwhich only utilizes polymer 1D sequential information dur-\ning fine-tuning, and MMPolymer-3D, which only utilizes 3D\nstructural information during fine-tuning, compared with\nthe best baseline on each polymer property dataset.",
+    "is_table": true,
+    "bbox": [
+      20.0,
+      76.57899475097656,
+      592.0,
+      201.5760040283203
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Zhang-2024-MMPolymer-Multimodal/images\\table_3.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 4",
+    "page": 8,
+    "caption": "4.3.1\nStar Substitution Strategy. As mentioned in Sec. 3.2.2, consid-\nering the regularity of polymer 3D structure and scarcity of polymer\n3D data, we apply the 3D conformation of its repeating unit (repre-\nsented by the P-SMILES string) to approximate the whole polymer\n3D conformation. Particularly, before generating this 3D confor-\nmation, we first convert the original P-SMILES string through our\n\"Star Substitution\" strategy, where the \"*\" symbol in the original\nP-SMILES string is replaced with the neighboring atom symbol of\nanother \"*\" symbol, to reflect the structural features of the whole\npolymer 3D conformation as more as possible. Here, comprehensive\nablation studies have been conducted to evaluate the effectiveness\nof our \"Star Substitution\" strategy.\nTable 4 displays the performance of MMPolymer under different\ndata processing strategies, including the default \"Star keep\" strategy\n(i.e., directly uses the original P-SMILES string), the \"Star Remove\"\nstrategy (i.e., remove \"*\" symbols in the original P-SMILES string),\nand our \"Star Substitution\" strategy (i.e., replace the \"*\" symbol in\nthe original P-SMILES string with the neighboring atom symbol\nof another \"*\" symbol). In general, compared with the default \"Star\nkeep\" strategy and the \"Star Remove\" strategy, the performance\nof MMPolymer can be consistently improved on all eight poly-\nmer property datasets by using our \"Star Substitution\" strategy.\nThis indicates that the 3D conformation of the repeating unit can\ncapture more structural features of the whole polymer 3D confor-\nmation through our \"Star Substitution\" strategy, thus emphasizing\nthe effectiveness of our \"Star Substitution\" strategy.\nIn particular, the performance of MMPolymer degrades when\nusing the \"Star Remove\" strategy. We attribute this phenomenon\nto the lack of polymerization site information. As mentioned in\nSec. 3.2.1, the P-SMILES string is formed by combining the SMILES",
+    "is_table": true,
+    "bbox": [
+      20.0,
+      351.8047790527344,
+      592.0,
+      717.561279296875
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Zhang-2024-MMPolymer-Multimodal/images\\table_4.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 5",
+    "page": 8,
+    "caption": "4.3.2\nMultimodal Multitask Pretraining Paradigm. As mentioned in\nSec. 3.3, MMPolymer is pretrained through our multimodal multi-\ntask paradigm, including the masked prediction task for pretraining\nthe 1D representation network, the coordinate denoising task for\npretraining the 3D representation network, and the cross-modal\nalignment task for aligning the learned multimodal representation.\nHere, to evaluate the effectiveness of our multimodal multitask pre-\ntraining paradigm, assessing the specific impact of 1D pretraining\n(i.e., the masked prediction task), 3D pretraining (i.e., the coordi-\nnate denoising task), and contrastive learning (i.e., the cross-modal\nalignment task) on the model performance, comprehensive ablation\nstudies have been conducted.\nTable 5 displays the performance of MMPolymer under differ-\nent pretraining settings, thus providing valuable insights into our\nproposed multimodal multitask pretraining paradigm. In general,\nwhen all three pretraining tasks (i.e., masked prediction task, coordi-\nnate denoising task, and cross-modal alignment task) are combined,\nMMPolymer achieves its optimal performance. This underscores\nthe synergistic effect of our multimodal multitask pretraining para-\ndigm, resulting in a robust and powerful model capable of capturing\ndiverse aspects of polymer data.\nSpecifically, we observe that incorporating 3D structural informa-\ntion greatly enhances the performance of MMPolymer, especially\nwhen combining both 1D sequential and 3D structural information,\nshowcasing the critical role of 3D structural information in polymer\nproperty prediction. Moreover, the utilization of contrastive learn-\ning further enhances the performance of MMPolymer. This suggests\nthat aligning learned representations across different modalities\ncontributes to better multimodal integration, thus improving the\npredictive performance of polymer properties. Notably, we aim to\nleverage complementary 1D and 3D information for polymer prop-\nerty prediction, rather than matching the two modalities. In this\ncase, purely applying the contrastive learning task is insufficient\nand leads to unsatisfactory performance, as shown in Table 5.\nBesides, we can observe that the performance of MMPolymer\nwith only 1D pretraining surpasses that with 3D pretraining on\nmost datasets. We attribute this phenomenon to the fact that we\napproximate the whole polymer 3D conformation with the 3D con-\nformation of its corresponding repeating unit. Although through\nour \"Star Substitution\" strategy, as analyzed in Sec. 4.3.1, the 3D con-\nformation of the repeating unit can reflect the structural features\nof the whole polymer 3D conformation to some extent, it is still not\naccurate enough to describe all natures. This observation highlights\nthe current issue of insufficient high-precision polymer 3D struc-\nture data and indicates that pure 3D pretraining methods still face\nsignificant challenges in the polymer domain, further emphasizing\nthe benefits of our multimodal multitask pretraining paradigm.",
+    "is_table": true,
+    "bbox": [
+      20.0,
+      178.5568084716797,
+      592.0,
+      717.5838012695312
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Zhang-2024-MMPolymer-Multimodal/images\\table_5.png",
+    "status": "ok",
+    "notes": ""
+  }
+]

@@ -1,0 +1,212 @@
+[
+  {
+    "label": "Figure 1",
+    "page": 2,
+    "caption": "Fig. 1    Graphical Representation of one regression tree.",
+    "is_table": false,
+    "bbox": [
+      15.0,
+      543.41259765625,
+      580.3499755859375,
+      739.7109985351562
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\figure_1.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Figure 2",
+    "page": 3,
+    "caption": "C\nC\nF\nF\nF\nCl\n4\n5\n2\n1\n6\n3\n6\n2 1 1\n0 0\n2\n6 0 0\n1 1\n1\n0 17 0\n0 0\n1\n0 0 9\n0 0\n0\n1 0 0\n9 0\n0\n1 0 0\n0 9",
+    "is_table": false,
+    "bbox": [
+      20.0,
+      219.79257202148438,
+      292.67498779296875,
+      462.5749206542969
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\figure_2.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Figure 3",
+    "page": 5,
+    "caption": "Fig. 3    Predicted versus real Tg values for (a) ET model with R2 of 0.97 for training and test and MAE of about 7 K in total; (b) GPR\nmodel with R2 of 0.97 for training and 0.94 for test and MAE of about 7.5 K in total; (c) GB model with R2 of 0.94 for training and test\nand MAE of about 17 K in total; (d) RF model with R2 of 0.92 for training and test and MAE of about 21 K in total.",
+    "is_table": false,
+    "bbox": [
+      15.0,
+      15,
+      580.3499755859375,
+      450.68450927734375
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\figure_3.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Figure 4",
+    "page": 7,
+    "caption": "",
+    "is_table": false,
+    "bbox": [
+      20.0,
+      15,
+      292.67498779296875,
+      269.3449401855469
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\figure_4.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Figure 5",
+    "page": 7,
+    "caption": "Fig. 5    Visualization of polymers with hydrogen bond power (the other structures in the database had no hydrogen bond power).",
+    "is_table": false,
+    "bbox": [
+      15.0,
+      394.5725402832031,
+      580.3499755859375,
+      629.9609985351562
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\figure_5.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Figure 6",
+    "page": 8,
+    "caption": "",
+    "is_table": false,
+    "bbox": [
+      20.0,
+      47.42655563354492,
+      292.67498779296875,
+      255.24490356445312
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\figure_6.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 1",
+    "page": 3,
+    "caption": "Table 1    Bond lengths used to calculate side chain occupancy length.[61]",
+    "is_table": true,
+    "bbox": [
+      302.67498779296875,
+      461.479248046875,
+      575.3499755859375,
+      623.8391723632812
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\table_1.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 2",
+    "page": 3,
+    "caption": "Table  2    Atomic  radiuses  used  to  calculate  side  chain  occupancy\nlength[61].",
+    "is_table": true,
+    "bbox": [
+      302.67498779296875,
+      474.27105712890625,
+      575.3499755859375,
+      646.58447265625
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\table_2.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 3",
+    "page": 4,
+    "caption": "In Eq. (3), OHi is the ith hydroxyl group, C2Oj is the jth oxy-\ngen that is double bonded to a carbon, Oj is the jth oxygen\nthat  has  two  single  bonds,  N3j is  the jth nitrogen  that  has\nthree single bonds, N2j is the jth nitrogen that has one double\nand one single bond, NHi is the ith nitrogen hydrogen bond,\nand An is the nth model coefficient[63] (Table 3).",
+    "is_table": true,
+    "bbox": [
+      20.0,
+      248.893798828125,
+      292.67498779296875,
+      590.072509765625
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\table_3.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 4",
+    "page": 4,
+    "caption": "Table 4    Pauling’s electronegativity values.[65]",
+    "is_table": true,
+    "bbox": [
+      302.67498779296875,
+      5,
+      575.3499755859375,
+      228.65514373779297
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\table_4.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 5",
+    "page": 5,
+    "caption": "Table 5    summarizes the performance of each machine-learning model.",
+    "is_table": true,
+    "bbox": [
+      15.0,
+      303.41278076171875,
+      580.3499755859375,
+      603.4127807617188
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\table_5.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 6",
+    "page": 6,
+    "caption": "Table 6    Some of the results of other studies conducted in this field.",
+    "is_table": true,
+    "bbox": [
+      15.0,
+      538.0645141601562,
+      580.3499755859375,
+      668.0245361328125
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\table_6.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 7",
+    "page": 6,
+    "caption": "Table 7    The performance of each machine-learning model using functional groups as features.",
+    "is_table": true,
+    "bbox": [
+      15.0,
+      512.6751403808594,
+      580.3499755859375,
+      812.6751403808594
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\table_7.png",
+    "status": "ok",
+    "notes": ""
+  },
+  {
+    "label": "Table 8",
+    "page": 7,
+    "caption": "Table 8    The performance of each machine-learning model in the absence of a specific descriptor.",
+    "is_table": true,
+    "bbox": [
+      15.0,
+      484.6210021972656,
+      580.3499755859375,
+      784.6210021972656
+    ],
+    "output_path": "C:/Users/24020/Desktop/Tg预测项目/docs/paper/精讲/Afsordeh-Shirali-2025-4Features-Tg/images\\table_8.png",
+    "status": "ok",
+    "notes": ""
+  }
+]

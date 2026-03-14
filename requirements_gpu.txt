@@ -1,0 +1,9 @@
+# GPU dependencies (A800)
+# Install CPU requirements first: pip install -r requirements.txt
+torch>=2.1
+torch-geometric>=2.4
+torch-scatter
+torch-sparse
+
+# All CPU deps
+-r requirements.txt

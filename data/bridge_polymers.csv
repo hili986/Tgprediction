@@ -1,0 +1,206 @@
+name,smiles,tg_k,family,hbond_pattern,source
+PPTA (Kevlar),*Nc1ccc(cc1)NC(=O)c1ccc(cc1)C(*)=O,630,PA,amide,Bicerano 2002
+PMIA (Nomex),*Nc1cccc(c1)NC(=O)c1cccc(c1)C(*)=O,546,PA,amide,Mark 1999
+Poly(p-benzamide),*NC(=O)c1ccc(*)cc1,570,PA,amide,Mark 1999
+PA 6T,*NCCCCCCNC(=O)c1ccc(cc1)C(*)=O,440,PA,amide,Kohan 2003
+PA 6I,*NCCCCCCNC(=O)c1cccc(c1)C(*)=O,400,PA,amide,Kohan 2003
+PA 4T,*NCCCCNC(=O)c1ccc(cc1)C(*)=O,460,PA,amide,estimated
+PA 10T,*NCCCCCCCCCCNC(=O)c1ccc(cc1)C(*)=O,410,PA,amide,Kohan 2003
+PA 12T,*NCCCCCCCCCCCCNC(=O)c1ccc(cc1)C(*)=O,400,PA,amide,estimated
+PA MXD6,*NCc1cccc(c1)CNC(=O)CCCCC(*)=O,358,PA,amide,Mitsubishi Gas
+PA MXDI-6,*NCCCCCCNC(=O)c1cccc(c1)C(*)=O,395,PA,amide,estimated
+Poly(m-phenylene adipamide),*Nc1cccc(c1)NC(=O)CCCCC(*)=O,380,PA,amide,estimated
+Poly(p-phenylene adipamide),*Nc1ccc(cc1)NC(=O)CCCCC(*)=O,400,PA,amide,estimated
+PA 6-3T,*NCCCCCCNC(=O)c1cc(C)cc(c1)C(*)=O,420,PA,amide,estimated
+Poly(trimethylhexamethylene terephthalamide),*NC(C)(C)CCCC(C)(C)NC(=O)c1ccc(cc1)C(*)=O,470,PA,amide,estimated
+Poly(p-phenylene sebacamide),*Nc1ccc(cc1)NC(=O)CCCCCCCCC(*)=O,360,PA,amide,estimated
+PU HDI-EG,*OC(=O)NCCCCCCNC(=O)OCC*,290,PU,urethane,Szycher 2013
+PU HDI-PG,*OC(=O)NCCCCCCNC(=O)OC(C)C*,280,PU,urethane,estimated
+PU HDI-BDO,*OC(=O)NCCCCCCNC(=O)OCCCC*,278,PU,urethane,Szycher 2013
+PU HDI-HD,*OC(=O)NCCCCCCNC(=O)OCCCCCC*,265,PU,urethane,estimated
+PU HDI-OD,*OC(=O)NCCCCCCNC(=O)OCCCCCCCC*,255,PU,urethane,estimated
+PU HDI-DD,*OC(=O)NCCCCCCNC(=O)OCCCCCCCCCC*,245,PU,urethane,estimated
+PU HDI-NPG,*OC(=O)NCCCCCCNC(=O)OCC(C)(C)C*,295,PU,urethane,estimated
+PU MDI-EG,*OC(=O)Nc1ccc(Cc2ccc(NC(=O)OCC*)cc2)cc1,393,PU,urethane,Szycher 2013
+PU MDI-BDO,*OC(=O)Nc1ccc(Cc2ccc(NC(=O)OCCCC*)cc2)cc1,373,PU,urethane,Szycher 2013
+PU MDI-HD,*OC(=O)Nc1ccc(Cc2ccc(NC(=O)OCCCCCC*)cc2)cc1,355,PU,urethane,estimated
+PU MDI-DEG,*OC(=O)Nc1ccc(Cc2ccc(NC(=O)OCCOCC*)cc2)cc1,340,PU,urethane,estimated
+PU MDI-NPG,*OC(=O)Nc1ccc(Cc2ccc(NC(=O)OCC(C)(C)C*)cc2)cc1,385,PU,urethane,estimated
+PU TDI-EG,*OC(=O)Nc1ccc(C)c(NC(=O)OCC*)c1,370,PU,urethane,estimated
+PU TDI-BDO,*OC(=O)Nc1ccc(C)c(NC(=O)OCCCC*)c1,353,PU,urethane,estimated
+PU TDI-HD,*OC(=O)Nc1ccc(C)c(NC(=O)OCCCCCC*)c1,335,PU,urethane,estimated
+PU IPDI-EG,*OC(=O)NC1CC(CC(C1)(C)C)NC(=O)OCC*,350,PU,urethane,estimated
+PU IPDI-BDO,*OC(=O)NC1CC(CC(C1)(C)C)NC(=O)OCCCC*,340,PU,urethane,estimated
+PU IPDI-HD,*OC(=O)NC1CC(CC(C1)(C)C)NC(=O)OCCCCCC*,325,PU,urethane,estimated
+PU HMDI-EG,*OC(=O)NC1CCC(CC1)CC1CCC(CC1)NC(=O)OCC*,345,PU,urethane,estimated
+PU HMDI-BDO,*OC(=O)NC1CCC(CC1)CC1CCC(CC1)NC(=O)OCCCC*,330,PU,urethane,estimated
+PI PMDA-ODA,*N(C(=O)c1cc(C(=O)*)cc(c1)C(=O)*)c1ccc(Oc2ccc(*)cc2)cc1,673,PI,imide,DuPont (Kapton)
+PI PMDA-PDA (p),*N(C(=O)c1cc(cc1C(=O)*)*)c1ccc(*)cc1,700,PI,imide,estimated
+PI PMDA-MDA,*N(C(=O)c1cc(cc1C(=O)*)*)c1ccc(Cc2ccc(*)cc2)cc1,650,PI,imide,estimated
+Poly(succinimide),*N1C(=O)CCC1=O,480,PI,imide,estimated
+Poly(maleimide),*N1C(=O)C=CC1=O,520,PI,imide,estimated
+Poly(phthalimide-phenyl),*c1ccc(cc1)N1C(=O)c2ccccc2C1=O,580,PI,imide,Mark 1999
+Poly(phthalimide-ether-phenyl),*c1ccc(Oc2ccc(N3C(=O)c4ccccc4C3=O)cc2)cc1,550,PI,imide,estimated
+Poly(phthalimide-methylene),*CN1C(=O)c2ccccc2C1=O,490,PI,imide,estimated
+Poly(phthalimide-hexamethylene),*CCCCCCN1C(=O)c2ccccc2C1=O,460,PI,imide,estimated
+Poly(naphthalimide-phenyl),*c1ccc(cc1)N1C(=O)c2cc3ccccc3cc2C1=O,620,PI,imide,estimated
+"Poly(4,4-ODA phthalimide-sulfone)",*c1ccc(S(=O)(=O)c2ccc(N3C(=O)c4ccccc4C3=O)cc2)cc1,560,PI,imide,estimated
+Poly(imide-carbonate),*OC(=O)Oc1ccc(cc1)N1C(=O)c2ccccc2C1=O,510,PI,imide,estimated
+Poly(ether imide) PEI,*c1ccc(Oc2ccc(N3C(=O)c4ccccc4C3=O)cc2)cc1,489,PI,imide,SABIC (Ultem)
+Poly(imide siloxane),*N1C(=O)c2ccccc2C1=O,470,PI,imide,estimated
+Poly(hexamethylene urea),*NCCCCCCNC(=O)N*,365,polyurea,urea,Mattia 2007
+Poly(tetramethylene urea),*NCCCCNC(=O)N*,385,polyurea,urea,estimated
+Poly(ethylene urea),*NCCNC(=O)N*,410,polyurea,urea,estimated
+Poly(octamethylene urea),*NCCCCCCCCNC(=O)N*,345,polyurea,urea,estimated
+Poly(decamethylene urea),*NCCCCCCCCCCNC(=O)N*,335,polyurea,urea,estimated
+Poly(dodecamethylene urea),*NCCCCCCCCCCCCNC(=O)N*,330,polyurea,urea,estimated
+Poly(MDI urea),*NC(=O)Nc1ccc(Cc2ccc(NC(=O)N*)cc2)cc1,450,polyurea,urea,estimated
+Poly(TDI urea),*NC(=O)Nc1ccc(C)c(NC(=O)N*)c1,430,polyurea,urea,estimated
+Poly(IPDI urea),*NC(=O)NC1CC(CC(C1)(C)C)NC(=O)N*,395,polyurea,urea,estimated
+Poly(XDI urea),*NC(=O)NCc1ccc(CNC(=O)N*)cc1,415,polyurea,urea,estimated
+Poly(piperazine urea),*NC(=O)N1CCNCC1*,420,polyurea,urea,estimated
+Poly(m-phenylene urea),*Nc1cccc(c1)NC(=O)N*,440,polyurea,urea,estimated
+Poly(p-phenylene urea),*Nc1ccc(cc1)NC(=O)N*,460,polyurea,urea,estimated
+Poly(HMDI urea),*NC(=O)NC1CCC(CC1)CC1CCC(CC1)NC(=O)N*,380,polyurea,urea,estimated
+Poly(methyl ethylene phosphonate),*CCOP(=O)(OC)O*,260,polyphosphoester,phosphoester,Wang 2001
+Poly(ethyl ethylene phosphonate),*CCOP(=O)(OCC)O*,245,polyphosphoester,phosphoester,Wang 2001
+Poly(isopropyl ethylene phosphonate),*CCOP(=O)(OC(C)C)O*,235,polyphosphoester,phosphoester,estimated
+Poly(phenyl ethylene phosphonate),*CCOP(=O)(Oc1ccccc1)O*,290,polyphosphoester,phosphoester,estimated
+Poly(methyl propylene phosphonate),*CCCOP(=O)(OC)O*,240,polyphosphoester,phosphoester,estimated
+Poly(ethyl propylene phosphonate),*CCCOP(=O)(OCC)O*,230,polyphosphoester,phosphoester,estimated
+Poly(methyl butylene phosphonate),*CCCCOP(=O)(OC)O*,230,polyphosphoester,phosphoester,estimated
+Poly(ethyl butylene phosphonate),*CCCCOP(=O)(OCC)O*,225,polyphosphoester,phosphoester,estimated
+Poly(methyl pentylene phosphonate),*CCCCCOP(=O)(OC)O*,222,polyphosphoester,phosphoester,estimated
+Poly(methyl hexylene phosphonate),*CCCCCCOP(=O)(OC)O*,218,polyphosphoester,phosphoester,estimated
+Poly(phenyl propylene phosphonate),*CCCOP(=O)(Oc1ccccc1)O*,275,polyphosphoester,phosphoester,estimated
+Poly(phenyl butylene phosphonate),*CCCCOP(=O)(Oc1ccccc1)O*,265,polyphosphoester,phosphoester,estimated
+Poly(bisphenol A ethyl phosphonate),*c1ccc(cc1)C(C)(c1ccc(OP(=O)(OCC)O*)cc1)C,325,polyphosphoester,phosphoester,estimated
+Poly(ethylene phosphate),*CCOP(=O)(O)O*,270,polyphosphoester,phosphoester,estimated
+Poly(propylene phosphate),*CCCOP(=O)(O)O*,255,polyphosphoester,phosphoester,estimated
+Poly(dichlorophosphazene),*N=P(Cl)(Cl)*,208,polyphosphazene,phosphoester,Allcock 2003
+Poly(bis(trifluoroethoxy)phosphazene),*N=P(OCC(F)(F)F)(OCC(F)(F)F)*,219,polyphosphazene,phosphoester,Allcock 2003
+Poly(bis(phenoxy)phosphazene),*N=P(Oc1ccccc1)(Oc1ccccc1)*,360,polyphosphazene,phosphoester,Allcock 2003
+Poly(bis(4-methylphenoxy)phosphazene),*N=P(Oc1ccc(C)cc1)(Oc1ccc(C)cc1)*,350,polyphosphazene,phosphoester,estimated
+Poly(bis(4-methoxyphenoxy)phosphazene),*N=P(Oc1ccc(OC)cc1)(Oc1ccc(OC)cc1)*,330,polyphosphazene,phosphoester,estimated
+Poly(bis(ethoxy)phosphazene),*N=P(OCC)(OCC)*,240,polyphosphazene,phosphoester,estimated
+Poly(bis(propoxy)phosphazene),*N=P(OCCC)(OCCC)*,230,polyphosphazene,phosphoester,estimated
+Poly(bis(butoxy)phosphazene),*N=P(OCCCC)(OCCCC)*,222,polyphosphazene,phosphoester,estimated
+Poly(bis(methoxyethoxy)phosphazene),*N=P(OCCOC)(OCCOC)*,243,polyphosphazene,phosphoester,Allcock 2003
+Poly(bis(4-fluorophenoxy)phosphazene),*N=P(Oc1ccc(F)cc1)(Oc1ccc(F)cc1)*,355,polyphosphazene,phosphoester,estimated
+Poly(bis(4-chlorophenoxy)phosphazene),*N=P(Oc1ccc(Cl)cc1)(Oc1ccc(Cl)cc1)*,365,polyphosphazene,phosphoester,estimated
+Poly(bis(4-isopropylphenoxy)phosphazene),*N=P(Oc1ccc(C(C)C)cc1)(Oc1ccc(C(C)C)cc1)*,340,polyphosphazene,phosphoester,estimated
+Poly(bis(2-naphthoxy)phosphazene),*N=P(Oc1ccc2ccccc2c1)(Oc1ccc2ccccc2c1)*,395,polyphosphazene,phosphoester,estimated
+Poly(bis(biphenoxy)phosphazene),*N=P(Oc1ccc(-c2ccccc2)cc1)(Oc1ccc(-c2ccccc2)cc1)*,410,polyphosphazene,phosphoester,estimated
+Poly(amino phosphazene),*N=P(NC)(NC)*,310,polyphosphazene,phosphoester,estimated
+Adenine monomer,c1nc(N)c2ncn(C3OC(CO)C(O)C3O)c2n1,500,nucleoside,purine,Simperler 2006
+Guanine monomer,c1nc2c(nc(N)nc2[nH]1)O,510,nucleoside,purine,estimated
+Cytosine monomer,c1cc(N)nc(=O)[nH]1,470,nucleoside,pyrimidine,estimated
+Thymine monomer,Cc1c[nH]c(=O)[nH]c1=O,460,nucleoside,pyrimidine,estimated
+Uracil monomer,c1c[nH]c(=O)[nH]c1=O,465,nucleoside,pyrimidine,estimated
+ATP (adenosine triphosphate),c1nc(N)c2ncn(C3OC(COP(=O)(O)OP(=O)(O)OP(=O)(O)O)C(O)C3O)c2n1,246,nucleoside,purine,Simperler 2006
+ADP (adenosine diphosphate),c1nc(N)c2ncn(C3OC(COP(=O)(O)OP(=O)(O)O)C(O)C3O)c2n1,244,nucleoside,purine,Simperler 2006
+AMP (adenosine monophosphate),c1nc(N)c2ncn(C3OC(COP(=O)(O)O)C(O)C3O)c2n1,249,nucleoside,purine,Simperler 2006
+PBI (polybenzimidazole),*c1ccc2[nH]c(nc2c1)c1nc2cc(*)ccc2[nH]1,700,misc,benzimidazole,Houck 2010
+Poly(vinyl alcohol),*CC(O)*,358,misc,hydroxyl,Mark 1999
+Poly(4-hydroxystyrene),*CC(*)c1ccc(O)cc1,443,misc,hydroxyl,Mark 1999
+Poly(acrylamide),*CC(C(=O)N)*,438,misc,amide,Mark 1999
+Poly(methacrylamide),*CC(C)(C(=O)N)*,478,misc,amide,estimated
+Poly(N-methylacrylamide),*CC(C(=O)NC)*,415,misc,amide,estimated
+Poly(N-vinylpyrrolidone),*CC(*)N1CCCC1=O,448,misc,amide,Mark 1999
+Poly(N-vinyl caprolactam),*CC(*)N1CCCCCC1=O,421,misc,amide,estimated
+Poly(2-hydroxypropyl methacrylate),*CC(C)(C(=O)OCC(C)O)*,346,misc,hydroxyl,estimated
+Poly(2-hydroxyethyl methacrylate) PHEMA,*CC(C)(C(=O)OCCO)*,355,misc,hydroxyl,Mark 1999
+Nylon 2,*C(=O)NC*,363,PA,amide,van Krevelen 2009
+Nylon 3,*C(=O)NCC*,349,PA,amide,van Krevelen 2009
+Nylon 4,*C(=O)NCCC*,335,PA,amide,van Krevelen 2009
+Nylon 5,*C(=O)NCCCC*,328,PA,amide,van Krevelen 2009
+Nylon 6,*C(=O)NCCCCC*,323,PA,amide,van Krevelen 2009
+Nylon 7,*C(=O)NCCCCCC*,319,PA,amide,van Krevelen 2009
+Nylon 8,*C(=O)NCCCCCCC*,316,PA,amide,van Krevelen 2009
+Nylon 9,*C(=O)NCCCCCCCC*,312,PA,amide,van Krevelen 2009
+Nylon 10,*C(=O)NCCCCCCCCC*,312,PA,amide,van Krevelen 2009
+Nylon 11,*C(=O)NCCCCCCCCCC*,316,PA,amide,van Krevelen 2009
+Nylon 12,*C(=O)NCCCCCCCCCCC*,310,PA,amide,van Krevelen 2009
+Nylon 13,*C(=O)NCCCCCCCCCCCC*,308,PA,amide,van Krevelen 2009
+"Nylon 2,2",*NCCNC(=O)C(=O)*,385,PA,amide,van Krevelen 2009
+"Nylon 2,4",*NCCNC(=O)CCC(=O)*,370,PA,amide,van Krevelen 2009
+"Nylon 2,6",*NCCNC(=O)CCCCC(=O)*,358,PA,amide,van Krevelen 2009
+"Nylon 4,4",*NCCCCNC(=O)CCC(=O)*,360,PA,amide,van Krevelen 2009
+"Nylon 4,6",*NCCCCNC(=O)CCCCC(=O)*,350,PA,amide,van Krevelen 2009
+"Nylon 4,8",*NCCCCNC(=O)CCCCCCC(=O)*,340,PA,amide,van Krevelen 2009
+"Nylon 4,10",*NCCCCNC(=O)CCCCCCCCC(=O)*,330,PA,amide,van Krevelen 2009
+"Nylon 6,4",*NCCCCCCNC(=O)CCC(=O)*,340,PA,amide,van Krevelen 2009
+"Nylon 6,6",*NCCCCCCNC(=O)CCCCC(=O)*,330,PA,amide,van Krevelen 2009
+"Nylon 6,8",*NCCCCCCNC(=O)CCCCCCC(=O)*,325,PA,amide,van Krevelen 2009
+"Nylon 6,9",*NCCCCCCNC(=O)CCCCCCCC(=O)*,323,PA,amide,van Krevelen 2009
+"Nylon 6,10",*NCCCCCCNC(=O)CCCCCCCCC(=O)*,323,PA,amide,van Krevelen 2009
+"Nylon 6,12",*NCCCCCCNC(=O)CCCCCCCCCCC(=O)*,319,PA,amide,van Krevelen 2009
+"Nylon 6,14",*NCCCCCCNC(=O)CCCCCCCCCCCCC(=O)*,315,PA,amide,van Krevelen 2009
+"Nylon 8,6",*NCCCCCCCCNC(=O)CCCCC(=O)*,320,PA,amide,van Krevelen 2009
+"Nylon 8,8",*NCCCCCCCCNC(=O)CCCCCCC(=O)*,318,PA,amide,van Krevelen 2009
+"Nylon 8,10",*NCCCCCCCCNC(=O)CCCCCCCCC(=O)*,315,PA,amide,van Krevelen 2009
+"Nylon 10,6",*NCCCCCCCCCCNC(=O)CCCCC(=O)*,315,PA,amide,van Krevelen 2009
+"Nylon 10,10",*NCCCCCCCCCCNC(=O)CCCCCCCCC(=O)*,310,PA,amide,van Krevelen 2009
+"Nylon 10,12",*NCCCCCCCCCCNC(=O)CCCCCCCCCCC(=O)*,308,PA,amide,van Krevelen 2009
+"Nylon 12,6",*NCCCCCCCCCCCCNC(=O)CCCCC(=O)*,312,PA,amide,van Krevelen 2009
+"Nylon 12,10",*NCCCCCCCCCCCCNC(=O)CCCCCCCCC(=O)*,306,PA,amide,van Krevelen 2009
+"Nylon 12,12",*NCCCCCCCCCCCCNC(=O)CCCCCCCCCCC(=O)*,303,PA,amide,van Krevelen 2009
+PU HDI-EG,*OC(=O)NCCCCCCNC(=O)OCC*,290,PU,urethane,estimated
+PU HDI-PG,*OC(=O)NCCCCCCNC(=O)OC(C)C*,285,PU,urethane,estimated
+PU HDI-BDO,*OC(=O)NCCCCCCNC(=O)OCCCC*,275,PU,urethane,estimated
+PU HDI-PDO,*OC(=O)NCCCCCCNC(=O)OCCCCC*,270,PU,urethane,estimated
+PU HDI-HD,*OC(=O)NCCCCCCNC(=O)OCCCCCC*,262,PU,urethane,estimated
+PU HDI-OD,*OC(=O)NCCCCCCNC(=O)OCCCCCCCC*,252,PU,urethane,estimated
+PU HDI-DD,*OC(=O)NCCCCCCNC(=O)OCCCCCCCCCC*,242,PU,urethane,estimated
+PU HDI-DEG,*OC(=O)NCCCCCCNC(=O)OCCOCC*,265,PU,urethane,estimated
+PU HDI-TEG,*OC(=O)NCCCCCCNC(=O)OCCOCCOCC*,255,PU,urethane,estimated
+PU HDI-CHDM,*OC(=O)NCCCCCCNC(=O)OCC1CCCCC1C*,285,PU,urethane,estimated
+PU DDI-EG,*OC(=O)NCCCCCCCCCCCCNC(=O)OCC*,260,PU,urethane,estimated
+PU DDI-PG,*OC(=O)NCCCCCCCCCCCCNC(=O)OC(C)C*,255,PU,urethane,estimated
+PU DDI-BDO,*OC(=O)NCCCCCCCCCCCCNC(=O)OCCCC*,245,PU,urethane,estimated
+PU DDI-PDO,*OC(=O)NCCCCCCCCCCCCNC(=O)OCCCCC*,240,PU,urethane,estimated
+PU DDI-HD,*OC(=O)NCCCCCCCCCCCCNC(=O)OCCCCCC*,232,PU,urethane,estimated
+PU DDI-OD,*OC(=O)NCCCCCCCCCCCCNC(=O)OCCCCCCCC*,222,PU,urethane,estimated
+PU DDI-DD,*OC(=O)NCCCCCCCCCCCCNC(=O)OCCCCCCCCCC*,212,PU,urethane,estimated
+PU DDI-DEG,*OC(=O)NCCCCCCCCCCCCNC(=O)OCCOCC*,235,PU,urethane,estimated
+PU DDI-TEG,*OC(=O)NCCCCCCCCCCCCNC(=O)OCCOCCOCC*,225,PU,urethane,estimated
+PU DDI-CHDM,*OC(=O)NCCCCCCCCCCCCNC(=O)OCC1CCCCC1C*,255,PU,urethane,estimated
+PU TMDI-EG,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OCC*,310,PU,urethane,estimated
+PU TMDI-PG,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OC(C)C*,305,PU,urethane,estimated
+PU TMDI-BDO,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OCCCC*,295,PU,urethane,estimated
+PU TMDI-PDO,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OCCCCC*,290,PU,urethane,estimated
+PU TMDI-HD,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OCCCCCC*,282,PU,urethane,estimated
+PU TMDI-OD,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OCCCCCCCC*,272,PU,urethane,estimated
+PU TMDI-DD,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OCCCCCCCCCC*,262,PU,urethane,estimated
+PU TMDI-DEG,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OCCOCC*,285,PU,urethane,estimated
+PU TMDI-TEG,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OCCOCCOCC*,275,PU,urethane,estimated
+PU TMDI-CHDM,*OC(=O)NC(C)(C)CCCC(C)(C)NC(=O)OCC1CCCCC1C*,305,PU,urethane,estimated
+Poly(3-methylene urea),*NCCCNC(=O)N*,390,polyurea,urea,estimated
+Poly(5-methylene urea),*NCCCCCNC(=O)N*,370,polyurea,urea,estimated
+Poly(7-methylene urea),*NCCCCCCCNC(=O)N*,350,polyurea,urea,estimated
+Poly(9-methylene urea),*NCCCCCCCCCNC(=O)N*,330,polyurea,urea,estimated
+Poly(11-methylene urea),*NCCCCCCCCCCCNC(=O)N*,320,polyurea,urea,estimated
+PI phthalimide-ethylene,*N(C(=O)c1ccccc1C(=O)*)CC*,475,PI,imide,estimated
+PI phthalimide-propylene,*N(C(=O)c1ccccc1C(=O)*)CCC*,465,PI,imide,estimated
+PI phthalimide-butylene,*N(C(=O)c1ccccc1C(=O)*)CCCC*,458,PI,imide,estimated
+PI phthalimide-hexylene,*N(C(=O)c1ccccc1C(=O)*)CCCCCC*,450,PI,imide,estimated
+PI phthalimide-octylene,*N(C(=O)c1ccccc1C(=O)*)CCCCCCCC*,440,PI,imide,estimated
+PI phthalimide-cyclohexylene,*N(C(=O)c1ccccc1C(=O)*)C1CCCCC1*,500,PI,imide,estimated
+PI phthalimide-phenylene-p,*N(C(=O)c1ccccc1C(=O)*)c1ccc(cc1)*,580,PI,imide,estimated
+PI phthalimide-phenylene-m,*N(C(=O)c1ccccc1C(=O)*)c1cccc(c1)*,560,PI,imide,estimated
+PI phthalimide-oxy-diphenyl,*N(C(=O)c1ccccc1C(=O)*)c1ccc(Oc2ccc(cc2))cc1*,550,PI,imide,estimated
+PI phthalimide-methylene-diphenyl,*N(C(=O)c1ccccc1C(=O)*)c1ccc(Cc2ccc(cc2))cc1*,540,PI,imide,estimated
+PI phthalimide-sulfonyl-diphenyl,*N(C(=O)c1ccccc1C(=O)*)c1ccc(S(=O)(=O)c2ccc(cc2))cc1*,570,PI,imide,estimated
+PI phthalimide-carbonyl-diphenyl,*N(C(=O)c1ccccc1C(=O)*)c1ccc(C(=O)c2ccc(cc2))cc1*,555,PI,imide,estimated
+PPZ methoxy/phenoxy,*N=P(OC)(Oc1ccccc1)*,315,polyphosphazene,phosphoester,estimated
+PPZ methoxy/4-methylphenoxy,*N=P(OC)(Oc1ccc(C)cc1)*,310,polyphosphazene,phosphoester,estimated
+PPZ methoxy/4-chlorophenoxy,*N=P(OC)(Oc1ccc(Cl)cc1)*,317,polyphosphazene,phosphoester,estimated
+PPZ ethoxy/phenoxy,*N=P(OCC)(Oc1ccccc1)*,310,polyphosphazene,phosphoester,estimated
+PPZ ethoxy/4-methylphenoxy,*N=P(OCC)(Oc1ccc(C)cc1)*,305,polyphosphazene,phosphoester,estimated
+PPZ ethoxy/4-chlorophenoxy,*N=P(OCC)(Oc1ccc(Cl)cc1)*,312,polyphosphazene,phosphoester,estimated
+PPZ propoxy/phenoxy,*N=P(OCCC)(Oc1ccccc1)*,305,polyphosphazene,phosphoester,estimated
+PPZ propoxy/4-methylphenoxy,*N=P(OCCC)(Oc1ccc(C)cc1)*,300,polyphosphazene,phosphoester,estimated
+PPZ propoxy/4-chlorophenoxy,*N=P(OCCC)(Oc1ccc(Cl)cc1)*,307,polyphosphazene,phosphoester,estimated
+PPZ butoxy/phenoxy,*N=P(OCCCC)(Oc1ccccc1)*,301,polyphosphazene,phosphoester,estimated
+PPZ butoxy/4-methylphenoxy,*N=P(OCCCC)(Oc1ccc(C)cc1)*,296,polyphosphazene,phosphoester,estimated
+PPZ butoxy/4-chlorophenoxy,*N=P(OCCCC)(Oc1ccc(Cl)cc1)*,303,polyphosphazene,phosphoester,estimated
