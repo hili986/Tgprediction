@@ -84,6 +84,7 @@ class TgPretrainer:
         scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
 
         best_val_loss = float("inf")
+        best_state = None
         history = []
 
         for epoch in range(1, epochs + 1):
@@ -97,7 +98,17 @@ class TgPretrainer:
                 record["val_loss"] = val_loss
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
+                    best_state = {
+                        k: v.clone() for k, v in self.model.state_dict().items()
+                    }
                     record["best"] = True
+            else:
+                # Track train loss when no val set
+                if train_loss < best_val_loss:
+                    best_val_loss = train_loss
+                    best_state = {
+                        k: v.clone() for k, v in self.model.state_dict().items()
+                    }
 
             history.append(record)
 
@@ -106,6 +117,10 @@ class TgPretrainer:
                 if val_loader is not None:
                     msg += f" | Val: {record.get('val_loss', 0):.4f}"
                 print(msg)
+
+        # Restore best model
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
 
         self.history["pretrain"] = history
         return {"history": history, "best_val_loss": best_val_loss}
@@ -279,7 +294,11 @@ class TgPretrainer:
         Args:
             path: File path to checkpoint.
         """
-        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        try:
+            checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+        except TypeError:
+            # PyTorch < 2.0 doesn't support weights_only
+            checkpoint = torch.load(path, map_location=self.device)
         self.model.load_state_dict(checkpoint["model_state_dict"])
         self.history = checkpoint.get("history", {"pretrain": [], "finetune": []})
         print(f"Checkpoint loaded from {path}")

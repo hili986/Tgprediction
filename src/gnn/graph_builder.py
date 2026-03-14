@@ -31,7 +31,6 @@ except ImportError:
     _HAS_PYG = False
 
 from rdkit import Chem
-from rdkit.Chem import Descriptors, rdMolDescriptors
 
 from src.features.virtual_polymerization import build_oligomer
 
@@ -352,10 +351,11 @@ def batch_smiles_to_graphs(
     y_list: Optional[List[float]] = None,
     n_repeat: int = 3,
     physics_features: bool = True,
-) -> List["Data"]:
+) -> Tuple[List["Data"], List[int]]:
     """Convert a list of SMILES to a list of PyG Data objects.
 
-    Skips SMILES that fail to convert.
+    Skips SMILES that fail to convert, and returns the valid indices
+    so callers can align other arrays (e.g. tabular features).
 
     Args:
         smiles_list: List of repeat-unit SMILES.
@@ -364,12 +364,19 @@ def batch_smiles_to_graphs(
         physics_features: Include physics features.
 
     Returns:
-        List of successfully created Data objects.
+        Tuple of (graphs, valid_indices):
+            graphs: List of successfully created Data objects.
+            valid_indices: List of original indices that succeeded.
     """
     graphs = []
+    valid_indices = []
     for i, smi in enumerate(smiles_list):
         y_val = y_list[i] if y_list is not None else None
         data = smiles_to_graph(smi, n_repeat, physics_features, y_val)
         if data is not None:
             graphs.append(data)
-    return graphs
+            valid_indices.append(i)
+    if len(graphs) < len(smiles_list):
+        n_failed = len(smiles_list) - len(graphs)
+        print(f"Warning: {n_failed}/{len(smiles_list)} SMILES failed graph conversion")
+    return graphs, valid_indices

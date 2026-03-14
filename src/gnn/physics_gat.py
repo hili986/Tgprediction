@@ -21,7 +21,12 @@ import torch
 import torch.nn as nn
 from torch_geometric.nn import GATConv, BatchNorm
 from torch_geometric.utils import softmax
-from torch_scatter import scatter
+
+# Prefer PyG built-in scatter (2.4+), fallback to torch_scatter
+try:
+    from torch_geometric.utils import scatter
+except ImportError:
+    from torch_scatter import scatter
 
 
 class RepeatInvariantPooling(nn.Module):

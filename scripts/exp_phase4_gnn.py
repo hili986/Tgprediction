@@ -123,7 +123,7 @@ def run_e10(device="cuda"):
 
 
 def run_e11(device="cuda"):
-    """E11: VPD-Deep — GNN as 3-mer embedding extractor."""
+    """E11: VPD-Deep — GNN as 3-mer embedding extractor (per-fold to avoid leakage)."""
     import torch
     from sklearn.ensemble import GradientBoostingRegressor
     from sklearn.model_selection import RepeatedKFold
@@ -135,69 +135,79 @@ def run_e11(device="cuda"):
     from torch_geometric.loader import DataLoader
 
     print("=" * 60)
-    print("E11: VPD-Deep (GNN 3-mer embedding)")
+    print("E11: VPD-Deep (GNN 3-mer embedding, per-fold)")
     print("=" * 60)
 
     X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
 
-    # Build graphs
-    graphs = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
-    valid_idx = list(range(len(graphs)))
+    # Build graphs with index tracking
+    graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
 
-    if len(graphs) < len(smiles_list):
-        print(f"Warning: {len(smiles_list) - len(graphs)} SMILES failed to convert")
+    # Align tabular features and targets to valid graphs
+    X_valid = X[valid_idx]
+    y_valid = y[valid_idx]
 
-    # Train a GNN to get embeddings, then use GBR on embeddings
-    model = TandemM2M(in_dim=25, tabular_dim=X.shape[1])
-    model.to(device)
+    # Attach tabular features
+    for i, g in enumerate(graphs):
+        g.tabular = torch.tensor(X_valid[i], dtype=torch.float).unsqueeze(0)
 
-    # Quick train to get meaningful embeddings
-    for g in graphs:
-        g.tabular = torch.tensor(X[valid_idx[graphs.index(g)]], dtype=torch.float).unsqueeze(0)
-
-    loader = DataLoader(graphs, batch_size=32, shuffle=True)
-    trainer = TgPretrainer(model, device=device, lr_pretrain=1e-3)
-    trainer.pretrain(loader, epochs=30)
-
-    # Extract embeddings
-    model.eval()
-    embeddings = []
-    with torch.no_grad():
-        for g in graphs:
-            g_dev = g.to(device)
-            g_dev.batch = torch.zeros(g_dev.x.size(0), dtype=torch.long, device=device)
-            emb = model.get_embedding(g_dev).cpu().numpy()
-            embeddings.append(emb.squeeze())
-
-    embeddings = np.array(embeddings)  # [N, 64]
-
-    # Combine with tabular: [N, 56+64=120]
-    X_combined = np.hstack([X[:len(embeddings)], embeddings])
-    y_valid = y[:len(embeddings)]
-
-    # Nested CV with GBR on combined features
+    # Per-fold: train GNN on train split, extract embeddings, then GBR
     cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
     r2_scores, mae_scores = [], []
 
-    for train_idx, test_idx in cv.split(X_combined):
+    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y_valid)):
+        train_graphs = [graphs[i] for i in train_idx]
+        test_graphs = [graphs[i] for i in test_idx]
+
+        # Train GNN on train split only (no leakage)
+        model = TandemM2M(in_dim=25, tabular_dim=X_valid.shape[1])
+        model.to(device)
+        train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
+        trainer = TgPretrainer(model, device=device, lr_pretrain=1e-3)
+        trainer.pretrain(train_loader, epochs=30)
+
+        # Extract embeddings for train and test
+        model.eval()
+
+        def _extract_embeddings(graph_list):
+            embs = []
+            with torch.no_grad():
+                for g in graph_list:
+                    g_dev = g.to(device)
+                    g_dev.batch = torch.zeros(
+                        g_dev.x.size(0), dtype=torch.long, device=device
+                    )
+                    emb = model.get_embedding(g_dev).cpu().numpy()
+                    embs.append(emb.squeeze())
+            return np.array(embs)
+
+        train_emb = _extract_embeddings(train_graphs)
+        test_emb = _extract_embeddings(test_graphs)
+
+        X_train_combined = np.hstack([X_valid[train_idx], train_emb])
+        X_test_combined = np.hstack([X_valid[test_idx], test_emb])
+
         gbr = GradientBoostingRegressor(
             n_estimators=300, max_depth=5, learning_rate=0.05,
             random_state=42,
         )
-        gbr.fit(X_combined[train_idx], y_valid[train_idx])
-        y_pred = gbr.predict(X_combined[test_idx])
+        gbr.fit(X_train_combined, y_valid[train_idx])
+        y_pred = gbr.predict(X_test_combined)
         r2_scores.append(r2_score(y_valid[test_idx], y_pred))
         mae_scores.append(mean_absolute_error(y_valid[test_idx], y_pred))
 
+        if (fold_idx + 1) % 5 == 0:
+            print(f"  Fold {fold_idx+1}/15: R2={r2_scores[-1]:.4f}")
+
     result = {
         "experiment": "E11",
-        "description": "VPD-Deep: GNN embedding + tabular -> GBR",
+        "description": "VPD-Deep: per-fold GNN embedding + tabular -> GBR",
         "R2_mean": float(np.mean(r2_scores)),
         "R2_std": float(np.std(r2_scores)),
         "MAE_mean": float(np.mean(mae_scores)),
         "MAE_std": float(np.std(mae_scores)),
-        "features": f"M2M 56d + GNN 64d = {X_combined.shape[1]}d",
-        "model": "GBR on combined features",
+        "features": f"M2M {X_valid.shape[1]}d + GNN 64d",
+        "model": "GBR on fused features (per-fold GNN)",
     }
     _save_result("E11", result)
     print(f"E11 Result: R2={result['R2_mean']:.4f} +/- {result['R2_std']:.4f}")
@@ -205,7 +215,7 @@ def run_e11(device="cuda"):
 
 
 def run_e12(device="cuda"):
-    """E12: PPF+VPD+GNN(64d) -> GBR fusion (cross-paradigm)."""
+    """E12: PPF+VPD+GNN(64d) -> GBR fusion (per-fold to avoid leakage)."""
     import torch
     from sklearn.ensemble import GradientBoostingRegressor
     from sklearn.model_selection import RepeatedKFold
@@ -217,77 +227,96 @@ def run_e12(device="cuda"):
     from torch_geometric.loader import DataLoader
 
     print("=" * 60)
-    print("E12: PPF+VPD+GNN(64d) -> GBR fusion")
+    print("E12: PPF+VPD+GNN(64d) -> GBR fusion (per-fold)")
     print("=" * 60)
 
     X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
 
-    # Build and pretrain GNN
-    graphs = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
+    # Build graphs with index tracking
+    graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
+    X_valid = X[valid_idx]
+    y_valid = y[valid_idx]
 
-    model = TandemM2M(in_dim=25, tabular_dim=X.shape[1])
-    model.to(device)
-
+    # Attach tabular features
     for i, g in enumerate(graphs):
-        g.tabular = torch.tensor(X[i], dtype=torch.float).unsqueeze(0)
+        g.tabular = torch.tensor(X_valid[i], dtype=torch.float).unsqueeze(0)
 
-    loader = DataLoader(graphs, batch_size=32, shuffle=True)
-    trainer = TgPretrainer(model, device=device)
-    trainer.pretrain(loader, epochs=50)
-
-    # Try loading pretrain data for better embeddings
+    # Try loading pretrain data (external, no leakage concern)
+    pretrain_loader = None
     try:
         from src.data.external_datasets import build_extended_dataset
         ext_X, ext_y, _, ext_smiles = build_extended_dataset(layer="M2M")
-        ext_graphs = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
+        ext_graphs, ext_valid_idx = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
+        ext_X_valid = ext_X[ext_valid_idx]
         for i, g in enumerate(ext_graphs):
-            g.tabular = torch.tensor(ext_X[i], dtype=torch.float).unsqueeze(0)
-        ext_loader = DataLoader(ext_graphs, batch_size=256, shuffle=True)
-        trainer.pretrain(ext_loader, epochs=50)
-        print(f"Pretrained on {len(ext_graphs)} external polymers")
+            g.tabular = torch.tensor(ext_X_valid[i], dtype=torch.float).unsqueeze(0)
+        pretrain_loader = DataLoader(ext_graphs, batch_size=256, shuffle=True)
+        print(f"Pretrain data: {len(ext_graphs)} external polymers")
     except Exception as e:
         print(f"Pretrain data unavailable: {e}")
 
-    # Finetune
-    trainer.finetune(loader, epochs=30, patience=10)
-
-    # Extract embeddings
-    model.eval()
-    embeddings = []
-    with torch.no_grad():
-        for g in graphs:
-            g_dev = g.to(device)
-            g_dev.batch = torch.zeros(g_dev.x.size(0), dtype=torch.long, device=device)
-            emb = model.get_embedding(g_dev).cpu().numpy()
-            embeddings.append(emb.squeeze())
-
-    embeddings = np.array(embeddings)
-    X_fused = np.hstack([X[:len(embeddings)], embeddings])
-    y_valid = y[:len(embeddings)]
-
-    # Nested CV with GBR
+    # Per-fold: pretrain(external) -> finetune(train) -> extract embeddings -> GBR
     cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
     r2_scores, mae_scores = [], []
 
-    for train_idx, test_idx in cv.split(X_fused):
+    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y_valid)):
+        train_graphs = [graphs[i] for i in train_idx]
+        test_graphs = [graphs[i] for i in test_idx]
+
+        # Fresh model per fold
+        model = TandemM2M(in_dim=25, tabular_dim=X_valid.shape[1])
+        trainer = TgPretrainer(model, device=device)
+
+        # Pretrain on external data (no leakage — external set)
+        if pretrain_loader is not None:
+            trainer.pretrain(pretrain_loader, epochs=50)
+
+        # Finetune on train fold only (no leakage)
+        train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
+        trainer.finetune(train_loader, epochs=30, patience=10)
+
+        # Extract embeddings using fold-specific model
+        model.eval()
+
+        def _extract_embeddings(graph_list):
+            embs = []
+            with torch.no_grad():
+                for g in graph_list:
+                    g_dev = g.to(device)
+                    g_dev.batch = torch.zeros(
+                        g_dev.x.size(0), dtype=torch.long, device=device
+                    )
+                    emb = model.get_embedding(g_dev).cpu().numpy()
+                    embs.append(emb.squeeze())
+            return np.array(embs)
+
+        train_emb = _extract_embeddings(train_graphs)
+        test_emb = _extract_embeddings(test_graphs)
+
+        X_train_fused = np.hstack([X_valid[train_idx], train_emb])
+        X_test_fused = np.hstack([X_valid[test_idx], test_emb])
+
         gbr = GradientBoostingRegressor(
             n_estimators=300, max_depth=5, learning_rate=0.05,
             random_state=42,
         )
-        gbr.fit(X_fused[train_idx], y_valid[train_idx])
-        y_pred = gbr.predict(X_fused[test_idx])
+        gbr.fit(X_train_fused, y_valid[train_idx])
+        y_pred = gbr.predict(X_test_fused)
         r2_scores.append(r2_score(y_valid[test_idx], y_pred))
         mae_scores.append(mean_absolute_error(y_valid[test_idx], y_pred))
 
+        if (fold_idx + 1) % 5 == 0:
+            print(f"  Fold {fold_idx+1}/15: R2={r2_scores[-1]:.4f}")
+
     result = {
         "experiment": "E12",
-        "description": "PPF+VPD+GNN(64d) -> GBR cross-paradigm fusion",
+        "description": "PPF+VPD+GNN(64d) -> GBR cross-paradigm fusion (per-fold)",
         "R2_mean": float(np.mean(r2_scores)),
         "R2_std": float(np.std(r2_scores)),
         "MAE_mean": float(np.mean(mae_scores)),
         "MAE_std": float(np.std(mae_scores)),
-        "features": f"M2M 56d + GNN 64d = {X_fused.shape[1]}d",
-        "model": "GBR on fused features",
+        "features": f"M2M {X_valid.shape[1]}d + GNN 64d",
+        "model": "GBR on fused features (per-fold GNN)",
     }
     _save_result("E12", result)
     print(f"E12 Result: R2={result['R2_mean']:.4f} +/- {result['R2_std']:.4f}")
@@ -309,18 +338,16 @@ def run_e13(device="cuda"):
     print("=" * 60)
 
     X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
-    graphs = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
+    graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
+    y_valid = y[valid_idx]
 
-    # Nested CV
+    # Nested CV on valid subset
     cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
     r2_scores, mae_scores = [], []
 
-    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y)):
-        train_graphs = [graphs[i] for i in train_idx if i < len(graphs)]
-        test_graphs = [graphs[i] for i in test_idx if i < len(graphs)]
-
-        if len(train_graphs) == 0 or len(test_graphs) == 0:
-            continue
+    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y_valid)):
+        train_graphs = [graphs[i] for i in train_idx]
+        test_graphs = [graphs[i] for i in test_idx]
 
         model = MultiTaskTgModel(in_dim=25).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -389,10 +416,11 @@ def run_e14(device="cuda"):
     print("=" * 60)
 
     X, y, feat_names, smiles_list = build_dataset_v2(layer="M2M")
-    graphs = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
+    graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
+    X_valid = X[valid_idx]
 
     for i, g in enumerate(graphs):
-        g.tabular = torch.tensor(X[i], dtype=torch.float).unsqueeze(0)
+        g.tabular = torch.tensor(X_valid[i], dtype=torch.float).unsqueeze(0)
 
     # Split: train 60%, cal 20%, test 20%
     n = len(graphs)
@@ -408,7 +436,7 @@ def run_e14(device="cuda"):
     cal_loader = DataLoader(cal_graphs, batch_size=32, shuffle=False)
     test_loader = DataLoader(test_graphs, batch_size=32, shuffle=False)
 
-    tabular_dim = X.shape[1]
+    tabular_dim = X_valid.shape[1]
 
     def model_fn():
         return TandemM2M(in_dim=25, tabular_dim=tabular_dim)
@@ -485,28 +513,32 @@ def run_e15(device="cuda"):
     try:
         from src.data.external_datasets import build_extended_dataset
         ext_X, ext_y, _, ext_smiles = build_extended_dataset(layer="M2M")
-        ext_graphs = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
+        ext_graphs, ext_valid_idx = batch_smiles_to_graphs(ext_smiles, y_list=ext_y.tolist())
+        ext_X_valid = ext_X[ext_valid_idx]
         for i, g in enumerate(ext_graphs):
-            g.tabular = torch.tensor(ext_X[i], dtype=torch.float).unsqueeze(0)
+            g.tabular = torch.tensor(ext_X_valid[i], dtype=torch.float).unsqueeze(0)
         pretrain_loader = DataLoader(ext_graphs, batch_size=256, shuffle=True)
         print(f"Pretrain data: {len(ext_graphs)} polymers")
     except Exception as e:
         print(f"Pretrain data unavailable: {e}")
 
-    # Build Bicerano graphs
-    graphs = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
+    # Build Bicerano graphs with index tracking
+    graphs, valid_idx = batch_smiles_to_graphs(smiles_list, y_list=y.tolist())
+    X_valid = X[valid_idx]
+    y_valid = y[valid_idx]
+
     for i, g in enumerate(graphs):
-        g.tabular = torch.tensor(X[i], dtype=torch.float).unsqueeze(0)
+        g.tabular = torch.tensor(X_valid[i], dtype=torch.float).unsqueeze(0)
 
-    tabular_dim = X.shape[1]
+    tabular_dim = X_valid.shape[1]
 
-    # Nested CV
+    # Nested CV on valid subset
     cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
     r2_scores, mae_scores = [], []
 
-    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y)):
-        train_graphs = [graphs[i] for i in train_idx if i < len(graphs)]
-        test_graphs = [graphs[i] for i in test_idx if i < len(graphs)]
+    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(y_valid)):
+        train_graphs = [graphs[i] for i in train_idx]
+        test_graphs = [graphs[i] for i in test_idx]
 
         train_loader = DataLoader(train_graphs, batch_size=32, shuffle=True)
         test_loader = DataLoader(test_graphs, batch_size=32, shuffle=False)

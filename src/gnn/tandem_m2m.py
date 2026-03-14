@@ -108,9 +108,11 @@ class TandemM2M(nn.Module):
         residual = self.mlp(fused)  # [B, 1]
 
         if self.use_baseline and baseline is not None:
+            # Residual correction: baseline + learnable weight * correction
             return baseline + self.alpha * residual
         else:
-            return self.alpha * residual
+            # Direct prediction: MLP outputs Tg directly (no alpha scaling)
+            return residual
 
     def get_embedding(self, data) -> torch.Tensor:
         """Get 64-dim graph embedding (for sklearn fusion in E12).

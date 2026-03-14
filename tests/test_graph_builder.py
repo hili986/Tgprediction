@@ -186,8 +186,9 @@ class TestSmilesToGraphIntegration(unittest.TestCase):
             self.skipTest("PyTorch Geometric not installed")
         from src.gnn.graph_builder import batch_smiles_to_graphs
         smiles_list = ["*CC*", "*CC(C)*", "*CC(c1ccccc1)*"]
-        graphs = batch_smiles_to_graphs(smiles_list)
+        graphs, valid_idx = batch_smiles_to_graphs(smiles_list)
         self.assertGreaterEqual(len(graphs), 2)
+        self.assertEqual(len(graphs), len(valid_idx))
 
 
 if __name__ == "__main__":

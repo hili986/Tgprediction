@@ -88,14 +88,15 @@ def nested_cv_gnn(
     # Build pretrain graphs once if provided
     pretrain_loader = None
     if pretrain_data is not None:
-        pretrain_graphs = batch_smiles_to_graphs(
+        pretrain_graphs, pretrain_valid_idx = batch_smiles_to_graphs(
             pretrain_data["smiles"],
             y_list=pretrain_data["y"],
         )
         if pretrain_data.get("tabular") is not None:
             for i, g in enumerate(pretrain_graphs):
+                orig_i = pretrain_valid_idx[i]
                 g.tabular = torch.tensor(
-                    pretrain_data["tabular"][i], dtype=torch.float
+                    pretrain_data["tabular"][orig_i], dtype=torch.float
                 ).unsqueeze(0)
         pretrain_loader = DataLoader(
             pretrain_graphs, batch_size=batch_size_pretrain, shuffle=True,
@@ -107,17 +108,23 @@ def nested_cv_gnn(
         test_smiles = [smiles_list[i] for i in test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
 
-        train_graphs = batch_smiles_to_graphs(train_smiles, y_list=y_train.tolist())
-        test_graphs = batch_smiles_to_graphs(test_smiles, y_list=y_test.tolist())
+        train_graphs, train_valid_idx = batch_smiles_to_graphs(
+            train_smiles, y_list=y_train.tolist(),
+        )
+        test_graphs, test_valid_idx = batch_smiles_to_graphs(
+            test_smiles, y_list=y_test.tolist(),
+        )
 
-        # Attach tabular features if provided
+        # Attach tabular features if provided (using valid indices for alignment)
         if tabular is not None:
             tab_train = tabular[train_idx]
             tab_test = tabular[test_idx]
             for i, g in enumerate(train_graphs):
-                g.tabular = torch.tensor(tab_train[i], dtype=torch.float).unsqueeze(0)
+                orig_i = train_valid_idx[i]
+                g.tabular = torch.tensor(tab_train[orig_i], dtype=torch.float).unsqueeze(0)
             for i, g in enumerate(test_graphs):
-                g.tabular = torch.tensor(tab_test[i], dtype=torch.float).unsqueeze(0)
+                orig_i = test_valid_idx[i]
+                g.tabular = torch.tensor(tab_test[orig_i], dtype=torch.float).unsqueeze(0)
 
         train_loader = DataLoader(
             train_graphs, batch_size=batch_size_finetune, shuffle=True,
