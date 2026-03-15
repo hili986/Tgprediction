@@ -3,7 +3,7 @@ Two-Stage GNN Pretrainer for Tg Prediction
 两阶段 GNN 预训练器
 
 Stage 1 (Pretrain): Large external dataset (~59K) with standard LR and dropout.
-Stage 2 (Finetune): Bicerano 304 with lower LR, higher dropout, frozen early layers.
+Stage 2 (Finetune): Target dataset (unified 7,486) with lower LR, higher dropout, frozen early layers.
 
 Usage:
     trainer = TgPretrainer(model, device="cuda")
@@ -40,7 +40,7 @@ class TgPretrainer:
         weight_decay_pretrain: L2 regularization for pretrain (default: 1e-4).
         weight_decay_finetune: L2 regularization for finetune (default: 1e-3).
         freeze_layers: Number of GAT layers to freeze during finetuning.
-        tabular_dim: Dimension of tabular features (default: 56 for M2M).
+        tabular_dim: Dimension of tabular features (default: 46 for M2M-V).
             Used for correct fallback tensor shape when batch lacks .tabular.
         dropout_pretrain: Dropout rate during pretraining (default: 0.2).
         dropout_finetune: Dropout rate during finetuning (default: 0.3).
@@ -55,7 +55,7 @@ class TgPretrainer:
         weight_decay_pretrain: float = 1e-4,
         weight_decay_finetune: float = 1e-3,
         freeze_layers: int = 2,
-        tabular_dim: int = 56,
+        tabular_dim: int = 46,
         dropout_pretrain: float = 0.2,
         dropout_finetune: float = 0.3,
     ):
@@ -146,7 +146,7 @@ class TgPretrainer:
         epochs: int = 50,
         patience: int = 10,
     ) -> Dict:
-        """Stage 2: Finetune on Bicerano 304 with frozen early layers.
+        """Stage 2: Finetune on target dataset with frozen early layers.
 
         Args:
             train_loader: DataLoader for finetuning data.

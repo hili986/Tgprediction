@@ -40,7 +40,7 @@ class DeepEnsembleTg:
         model_fn: Callable[[], TandemM2M],
         n_models: int = 5,
         device: str = "cuda",
-        tabular_dim: int = 56,
+        tabular_dim: int = 46,
     ):
         self.n_models = n_models
         self.device = device

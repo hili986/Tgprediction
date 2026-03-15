@@ -15,7 +15,7 @@ Architecture:
     3. alpha * residual added to GC baseline (or direct prediction if no baseline)
 
 Public API:
-    TandemM2M(in_dim=25, tabular_dim=56, hidden=64, out_dim=1, ...) -> Module
+    TandemM2M(in_dim=25, tabular_dim=46, hidden=64, out_dim=1, ...) -> Module
 """
 
 import torch
@@ -29,7 +29,7 @@ class TandemM2M(nn.Module):
 
     Args:
         in_dim: Atom feature dimension (default: 25).
-        tabular_dim: Tabular feature dimension (default: 56, M2M features).
+        tabular_dim: Tabular feature dimension (default: 46, M2M-V features).
         gnn_hidden: GNN hidden dimension (default: 128).
         gnn_out: GNN output/embedding dimension (default: 64).
         gnn_heads: GAT attention heads (default: 4).
@@ -43,7 +43,7 @@ class TandemM2M(nn.Module):
     def __init__(
         self,
         in_dim: int = 25,
-        tabular_dim: int = 56,
+        tabular_dim: int = 46,
         gnn_hidden: int = 128,
         gnn_out: int = 64,
         gnn_heads: int = 4,
@@ -128,7 +128,7 @@ class TandemM2M(nn.Module):
     def freeze_gnn_layers(self, n_layers: int = 2):
         """Freeze first n GAT layers for fine-tuning.
 
-        During fine-tuning on small datasets (e.g., Bicerano 304),
+        During fine-tuning on target datasets (e.g., unified 7,486),
         freeze early layers to prevent overfitting while allowing
         the final GAT layer + MLP + alpha to adapt.
 

@@ -81,7 +81,7 @@ def nested_cv_gnn(
     tabular_dim = tabular.shape[1] if tabular is not None else 1
 
     # Strategy B: pre-filter invalid SMILES, then split on valid subset
-    # This ensures consistent fold assignments across all experiments (E9-E15)
+    # This ensures consistent fold assignments across all experiments (E25-E31)
     all_graphs, valid_idx = batch_smiles_to_graphs(
         smiles_list, y_list=y.tolist(),
     )
