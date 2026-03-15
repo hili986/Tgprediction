@@ -310,8 +310,14 @@ def train_gnn_with_pretrain(
     finetune_epochs: int = FINETUNE_EPOCHS,
     patience: int = PATIENCE,
     gnn_config: Optional[dict] = None,
+    tab_valid_indices: Optional[List[int]] = None,
 ) -> "TgPretrainer":
     """Train a TandemM2M model with optional pretraining.
+
+    Args:
+        tab_valid_indices: Original SMILES indices for each row in
+            tabular_train (from load_tabular_features). Required when
+            tabular_train is a pre-filtered array.
 
     Returns:
         Trained TgPretrainer instance.
@@ -331,13 +337,27 @@ def train_gnn_with_pretrain(
         smiles_train, y_list=y_train.tolist(),
     )
 
-    # Attach tabular features
+    # Attach tabular features (index mapping: valid_idx → tab_valid_indices)
     if tabular_train is not None:
+        tab_idx_map = (
+            {orig: pos for pos, orig in enumerate(tab_valid_indices)}
+            if tab_valid_indices is not None
+            else None
+        )
         for i, g in enumerate(finetune_graphs):
             orig_i = valid_idx[i]
-            g.tabular = torch.tensor(
-                tabular_train[orig_i], dtype=torch.float
-            ).unsqueeze(0)
+            if tab_idx_map is not None and orig_i in tab_idx_map:
+                g.tabular = torch.tensor(
+                    tabular_train[tab_idx_map[orig_i]], dtype=torch.float
+                ).unsqueeze(0)
+            elif tab_idx_map is None:
+                g.tabular = torch.tensor(
+                    tabular_train[orig_i], dtype=torch.float
+                ).unsqueeze(0)
+            else:
+                g.tabular = torch.zeros(
+                    1, tabular_train.shape[1], dtype=torch.float
+                )
 
     finetune_loader = DataLoader(
         finetune_graphs, batch_size=BATCH_SIZE_FINETUNE, shuffle=True,
@@ -593,6 +613,7 @@ def run_e27_fusion_catboost(
         device=device,
         pretrain_epochs=pretrain_epochs,
         finetune_epochs=finetune_epochs,
+        tab_valid_indices=tab_valid_train,
     )
 
     # Extract GNN embeddings
@@ -676,6 +697,7 @@ def run_e28_fusion_stacking(
         device=device,
         pretrain_epochs=pretrain_epochs,
         finetune_epochs=finetune_epochs,
+        tab_valid_indices=tab_valid_train,
     )
 
     # Extract GNN embeddings
@@ -923,11 +945,15 @@ def run_e30_multitask(
         smiles_train, y_list=y_train.tolist(),
     )
     if tab_train is not None:
+        tab_idx_map = {orig: pos for pos, orig in enumerate(tab_valid_train)}
         for i, g in enumerate(finetune_graphs):
             orig_i = valid_idx[i]
-            g.tabular = torch.tensor(
-                tab_train[orig_i], dtype=torch.float
-            ).unsqueeze(0)
+            if orig_i in tab_idx_map:
+                g.tabular = torch.tensor(
+                    tab_train[tab_idx_map[orig_i]], dtype=torch.float
+                ).unsqueeze(0)
+            else:
+                g.tabular = torch.zeros(1, TABULAR_DIM, dtype=torch.float)
     finetune_loader = DataLoader(
         finetune_graphs, batch_size=BATCH_SIZE_FINETUNE, shuffle=True,
     )
@@ -1023,11 +1049,15 @@ def run_e31_deep_ensemble(
         smiles_train, y_list=y_train.tolist(),
     )
     if tab_train is not None:
+        tab_idx_map = {orig: pos for pos, orig in enumerate(tab_valid_train)}
         for i, g in enumerate(finetune_graphs):
             orig_i = ft_valid[i]
-            g.tabular = torch.tensor(
-                tab_train[orig_i], dtype=torch.float
-            ).unsqueeze(0)
+            if orig_i in tab_idx_map:
+                g.tabular = torch.tensor(
+                    tab_train[tab_idx_map[orig_i]], dtype=torch.float
+                ).unsqueeze(0)
+            else:
+                g.tabular = torch.zeros(1, TABULAR_DIM, dtype=torch.float)
 
     finetune_loader = DataLoader(
         finetune_graphs, batch_size=BATCH_SIZE_FINETUNE, shuffle=True,
