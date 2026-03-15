@@ -43,6 +43,9 @@ Thumbs.db
 _write_report.py
 gen_report.py
 MEMORY.md
+catboost_info/
+data/*.parquet
+docs/paper/raw paper/
 
 # Stray files (empty, accidentally created)
 u8c03*

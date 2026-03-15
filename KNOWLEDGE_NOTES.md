@@ -590,3 +590,111 @@
 **推荐资源**：
 - Veličković et al. (2018): "Graph Attention Networks" — GAT 原始论文
 - Hu et al. (2020): "Strategies for Pre-training Graph Neural Networks" — GNN 预训练策略
+
+### MSE Loss（均方误差损失）的原理与应用 — 2026-03-15
+**来源**：Level 1 (同步)
+**触发场景**：用户询问 MSE loss 的算法，源于分析 pretrainer.py 中 GNN 训练日志（每 epoch 打印 train/val MSE）
+**核心要点**：
+- MSE = (1/N) × Σ(y_i - ŷ_i)²，对每个样本算残差→平方→求平均
+- 平方的作用：大误差受到更重的惩罚（差 10K 的惩罚是差 5K 的 4 倍）
+- MSE 与 R² 的关系：R² = 1 - MSE/Var(y)，MSE 是 R² 的"未标准化版本"
+- 训练用 MSE 而非 R² 的原因：MSE 可微分（梯度下降需要），R² 的分母 Var(y) 在 mini-batch 中不稳定
+- R²=0 意味着 MSE=Var(y)（模型等价于预测均值），R²<0 意味着 MSE>Var(y)（比瞎猜还差）
+- 本项目 pretrainer.py 中每 epoch 的 Train/Val 数值就是 MSE，值越小越好，单位是 K²
+**相关概念**：损失函数, 梯度下降, R², 方差, 反向传播
+**推荐资源**：
+- Goodfellow et al. (2016), "Deep Learning", Chapter 6.2 (损失函数选择)
+- PyTorch F.mse_loss 文档: https://pytorch.org/docs/stable/generated/torch.nn.functional.mse_loss.html
+
+### 跨数据源去重：预期 13.4K 实际仅 7.5K 的"重叠陷阱" — 2026-03-15
+**来源**：Level 2 (深度讲解)
+**触发场景**：统一数据集重构（Option B），将 Bicerano + PolyMetriX + NeurIPS OPP + Conjugated 32 合并为 unified_tg.parquet
+**分析过程**：
+- 原计划 ~13,400 条（各数据源简单相加），实际 RDKit Canonical SMILES 去重后仅 7,486 条
+- PolyMetriX 和 NeurIPS OPP 都源自 PolyInfo (NIMS)，交叉重叠约 50%
+- Bicerano 内部也有 2 对重复 SMILES（304→302）：Poly(1-heptene)/Poly(l-hexene) 同分子不同名，以及一对萘酰亚胺聚合物 Tg 差 67K
+- 去重策略：Bicerano 优先 → PolyMetriX → NeurIPS OPP → Conjugated 32（按数据质量排序）
+**核心要点**：
+- 字符串相等 ≠ 分子相同：`*CC*` 和 `*C(*)` 和 `C(*)C*` 可能是同一分子，必须用 RDKit Canonical SMILES 判定
+- 同一分子在不同数据源中的 Tg 差异（Tg 冲突）需要解决策略：中位数 / 优先级保留
+- 公开数据集的上游溯源极其重要——看似"独立"的数据集可能共享相同的上游源（PolyInfo 瓶颈效应）
+- 去重后实际独占贡献：Bicerano 53 条独占 + PolyMetriX ~4,576 独占 + NeurIPS ~542 独占
+- 教训：数据量规划应基于"去重后分子数"而非"原始行数"
+**相关概念**：Canonical SMILES, 数据溯源 (data provenance), 集合运算 (交/并/差), 数据去冗余
+**推荐资源**：
+- RDKit Canonical SMILES: https://www.rdkit.org/docs/GettingStartedInPython.html#working-with-molecules
+- Google Data Cascades (NeurIPS 2021): 数据质量问题如何级联影响下游
+
+### build_oligomer() 寡聚体组装失败的根因与影响 — 2026-03-15
+**来源**：Level 2 (深度讲解)
+**触发场景**：用户在 GPU 上运行 GNN 实验时出现大量 RDKit SMILES 解析错误（`n()` 空括号、kekulization failure）
+**分析过程**：
+- 报错来自 `virtual_polymerization.py` 的 `build_oligomer()` → `_fallback_oligomer()`
+- `_fallback_oligomer` 用 `smiles.replace("*", "")` 删除连接点 → 对 `N(*)` 产生非法 `N()` 空括号
+- 复杂稠环芳烃（萘酰亚胺、三嗪等）的 RDKit 分子级操作也容易失败（RemoveAtom 破坏环闭合）
+- 失败时 VPD 回退到单体描述符：不会 crash，但丢失了聚合效应信息
+**核心要点**：
+- 聚合物 SMILES 中 `*` 可能连接在 N、O 等杂原子上，简单删除 `*` 会破坏化合价规则
+- 正确的回退策略：`smiles.replace("*", "[H]")`（氢封端）而非 `smiles.replace("*", "")`（删除）
+- 稠环芳烃的寡聚体组装是 RDKit 已知难点：kekulization 算法在复杂共轭体系中容易失败
+- 对 Bicerano 304 影响小（大多是简单聚合物），对扩展数据集中的复杂聚合物影响较大
+- 这是特征层面的信息缺失，不是数据质量问题——原始 SMILES 本身是合法的
+**相关概念**：SMILES 化合价规则, Kekulé 结构, RDKit SanitizeMol, 寡聚体组装, 回退策略
+**推荐资源**：
+- RDKit Chem.SanitizeMol 文档: https://www.rdkit.org/docs/source/rdkit.Chem.rdmolops.html
+- Weininger (1988), "SMILES: A chemical language" — SMILES 语法规范原始论文
+
+
+### ML 表格数据最佳实践 2024-2026 -- 2026-03-15
+**来源**：Level 2 (深度讲解)
+**触发场景**：为 ~7,500 样本 Tg 预测项目进行 ML 最佳实践调研
+**分析过程**：
+- 从 5 个维度（算法/SOTA/基准/UQ/特征选择）系统检索 2024-2026 文献和竞赛
+- 重点对比了 CatBoost vs ExtraTrees（项目当前主模型），发现 ordered boosting 在中等数据集上的 target leakage 缓解优势
+- 发现 TabPFN v2 是首个在 <10K 样本上系统性超越 GBDT 的 DL 模型，且零调参
+- MAPIE CQR 为核酸域外预测提供了理论保证的不确定性区间
+**核心要点**：
+- CatBoost ordered boosting 通过排序编码避免 target leakage，在 1K-50K 数据集上比 XGBoost 平均高 ~6%
+- TabPFN v2 基于 in-context learning（在合成表格数据上预训练的 Transformer），限制：<10K 样本、<500 维特征
+- Conformal Prediction 是分布无关的 UQ 方法：给定覆盖率 1-alpha，实际覆盖率 >= 1-alpha-1/(n+1)
+- 7,500 样本足以支撑 2 层 Stacking（304 样本时 3 次失败的根因是样本不足，非方法本身问题）
+- Boruta-SHAP 结合了 Boruta 的统计严格性和 SHAP 的全局重要性，比原始 Boruta 快 3-5x
+**相关概念**：Target Leakage, In-context Learning, Conformal Prediction, Stacking Generalization, Feature Importance
+**推荐资源**：
+- TabPFN v2 论文: arXiv:2410.18021 (2024)
+- MAPIE 文档: https://mapie.readthedocs.io/
+- CatBoost 论文: Prokhorenkova et al., NeurIPS 2018
+- McElfresh et al., When Do Neural Nets Outperform Boosted Trees on Tabular Data?, ICLR 2024
+
+### Holdout 评估中参数一致性 Bug (H1) — 2026-03-15
+**来源**：Level 1 (同步)
+**触发场景**：Phase 5 实验脚本 H1 bug 修复 — 当 Optuna 调参启用时，holdout 评估使用默认参数而非最佳调参结果
+**核心要点**：
+- `nested_cv_optuna()` 返回的 `best_params` 列表包含每折的 `study.best_params`（原始 Optuna 参数字典）
+- Bug: holdout 评估用 `get_estimator("ModelName")` 创建默认实例，忽略了 Optuna 找到的最佳超参
+- Fix: 找到最佳 CV fold → 提取其 `study.best_params` → `get_estimator("ModelName", **best_params)` 覆盖默认参数
+- `study.best_params` 只包含被调参的参数（如 `iterations`, `learning_rate`），固定参数（如 `random_seed=42`）由 `get_estimator` 的 zoo 默认值提供
+- 教训：任何"两阶段"流程（CV 选参 → holdout 评估），都必须确保第二阶段使用第一阶段的最佳参数
+**相关概念**：超参数调优, Optuna, Nested CV, 参数传递
+
+### GBR 串行瓶颈与 GBDT 并行性差异 — 2026-03-15
+**来源**：Level 1 (同步)
+**触发场景**：用户用 50 trials Optuna 跑 GBR 等了数小时，对比 LightGBM 仅需分钟级别
+**核心要点**：
+- GBR (Gradient Boosting Regressor) 本质串行：每棵树依赖前一棵树的残差，无法跨树并行
+- LightGBM/XGBoost 在树内部用直方图近似 + 多线程分裂搜索，单棵树训练更快（但树间仍串行）
+- ExtraTrees 完全并行：每棵树独立（Bagging），可充分利用多核 CPU
+- Optuna 放大差异：50 trials × 每 trial 训练一个完整模型，GBR 每 trial 慢 10-20x → 总时间差 100x+
+- 策略：先 `--no-optuna` 快速验证全部实验，再对关键模型选择性开启 Optuna
+**相关概念**：Boosting vs Bagging, 并行计算, 超参搜索策略
+
+### Windows 11 wmic 弃用与 joblib 兼容性 — 2026-03-15
+**来源**：Level 1 (同步)
+**触发场景**：E21 Stacking 运行时刷屏大量 `wmic` / `loky` UserWarning
+**核心要点**：
+- Windows 11 弃用 `wmic.exe`（Windows Management Instrumentation CLI），改用 PowerShell `Get-CimInstance`
+- `joblib` 的 `loky` 并行后端用 `wmic CPU Get NumberOfCores` 检测物理核心数，失败后回退到逻辑核心数
+- 这是警告不是错误 — 并行计算正常工作，只是刷屏影响可读性
+- 修复方案：`os.environ["LOKY_MAX_CPU_COUNT"] = str(os.cpu_count())` 绕过 wmic 调用
+- Stacking 特别多警告是因为内部 3 个基模型 × CV 折叠，每次 joblib 启动都触发一次
+**相关概念**：进程管理, CPU 核心检测, 环境变量, Python warnings 模块
