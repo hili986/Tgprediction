@@ -724,6 +724,196 @@ def build_extended_dataset(
 
 
 # ---------------------------------------------------------------------------
+# Unified dataset builder (Option B: merge all homopolymers)
+# ---------------------------------------------------------------------------
+
+def build_unified_dataset(
+    sources: Optional[List[str]] = None,
+    min_tg_k: float = 100.0,
+    max_tg_k: float = 900.0,
+    verbose: bool = True,
+) -> "pd.DataFrame":
+    """Merge Bicerano + all external homopolymer sources into one DataFrame.
+
+    Deduplicates by canonical SMILES (Bicerano priority).
+    Returns DataFrame with columns: [smiles, tg_k, source, canonical_smiles].
+
+    Args:
+        sources: External source names. None = DEFAULT_SOURCES.
+        min_tg_k: Minimum Tg filter.
+        max_tg_k: Maximum Tg filter.
+        verbose: Print statistics.
+
+    Returns:
+        pd.DataFrame with unified homopolymer Tg data.
+    """
+    import pandas as pd
+    from src.data.bicerano_tg_dataset import BICERANO_DATA
+
+    # 1. Load Bicerano (highest priority) with internal dedup
+    bicerano_raw = []
+    for name, smiles, _, tg_k in BICERANO_DATA:
+        tg_val = float(tg_k)
+        if not (min_tg_k <= tg_val <= max_tg_k):
+            continue
+        canon = _canonical_smiles(smiles)
+        bicerano_raw.append({
+            "smiles": smiles,
+            "tg_k": tg_val,
+            "source": "bicerano",
+            "canonical_smiles": canon if canon else smiles,
+        })
+
+    # Internal dedup by canonical SMILES (median Tg for conflicts)
+    bicerano_groups: Dict[str, list] = {}
+    for entry in bicerano_raw:
+        key = entry["canonical_smiles"]
+        if key not in bicerano_groups:
+            bicerano_groups[key] = []
+        bicerano_groups[key].append(entry)
+
+    bicerano_entries = []
+    bicerano_dup_count = 0
+    for canon_key, group in bicerano_groups.items():
+        if len(group) == 1:
+            bicerano_entries.append(group[0])
+        else:
+            bicerano_dup_count += 1
+            best = group[0].copy()
+            best["tg_k"] = median([e["tg_k"] for e in group])
+            bicerano_entries.append(best)
+
+    if verbose:
+        print(f"  Bicerano: {len(bicerano_raw)} raw -> "
+              f"{len(bicerano_entries)} after internal dedup "
+              f"({bicerano_dup_count} duplicates merged)")
+
+    # 2. Load external homopolymers
+    external = load_all_external(
+        sources=sources,
+        min_tg_k=min_tg_k,
+        max_tg_k=max_tg_k,
+        deduplicate=True,
+        verbose=verbose,
+    )
+
+    # 3. Deduplicate external against Bicerano
+    bicerano_canonical = {e["canonical_smiles"] for e in bicerano_entries}
+    external_entries = []
+    skipped_dup = 0
+    for d in external:
+        canon = _canonical_smiles(d["smiles"])
+        if canon and canon in bicerano_canonical:
+            skipped_dup += 1
+            continue
+        if canon:
+            bicerano_canonical.add(canon)
+        external_entries.append({
+            "smiles": d["smiles"],
+            "tg_k": d["tg_k"],
+            "source": d["source"],
+            "canonical_smiles": canon if canon else d["smiles"],
+        })
+
+    if verbose:
+        print(f"  External (after dedup vs Bicerano): {len(external_entries)} "
+              f"(skipped {skipped_dup} duplicates)")
+
+    # 4. Merge
+    all_entries = bicerano_entries + external_entries
+    df = pd.DataFrame(all_entries)
+
+    if verbose:
+        print(f"  Unified dataset: {len(df)} total entries")
+        for src, cnt in df["source"].value_counts().items():
+            print(f"    {src}: {cnt}")
+
+    return df
+
+
+def save_unified_parquet(
+    output_path: Optional[str] = None,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    verbose: bool = True,
+) -> Tuple[str, int, int]:
+    """Build unified dataset, split train/test, save as Parquet.
+
+    Args:
+        output_path: Path for output Parquet. None = data/unified_tg.parquet.
+        test_size: Test set fraction (default 0.2).
+        random_state: Random seed for reproducible split.
+        verbose: Print statistics.
+
+    Returns:
+        (output_path, n_train, n_test)
+    """
+    import pandas as pd
+    from sklearn.model_selection import train_test_split
+
+    if output_path is None:
+        output_path = str(
+            Path(__file__).resolve().parent.parent.parent
+            / "data" / "unified_tg.parquet"
+        )
+
+    df = build_unified_dataset(verbose=verbose)
+
+    # Stratified-ish split: use pd.qcut on tg_k for balanced Tg distribution
+    df["tg_bin"] = pd.qcut(df["tg_k"], q=10, labels=False, duplicates="drop")
+    train_df, test_df = train_test_split(
+        df, test_size=test_size, random_state=random_state,
+        stratify=df["tg_bin"],
+    )
+    train_df = train_df.drop(columns=["tg_bin"]).reset_index(drop=True)
+    test_df = test_df.drop(columns=["tg_bin"]).reset_index(drop=True)
+
+    # Add split column and combine
+    train_df["split"] = "train"
+    test_df["split"] = "test"
+    combined = pd.concat([train_df, test_df], ignore_index=True)
+
+    combined.to_parquet(output_path, index=False)
+
+    if verbose:
+        print(f"\n  Saved to: {output_path}")
+        print(f"  Train: {len(train_df)}, Test: {len(test_df)}")
+        print(f"  Train Tg range: [{train_df['tg_k'].min():.1f}, "
+              f"{train_df['tg_k'].max():.1f}]K")
+        print(f"  Test Tg range: [{test_df['tg_k'].min():.1f}, "
+              f"{test_df['tg_k'].max():.1f}]K")
+
+    return output_path, len(train_df), len(test_df)
+
+
+def load_unified_dataset(
+    parquet_path: Optional[str] = None,
+    split: Optional[str] = None,
+) -> "pd.DataFrame":
+    """Load unified dataset from Parquet file.
+
+    Args:
+        parquet_path: Path to Parquet file. None = data/unified_tg.parquet.
+        split: 'train', 'test', or None (all data).
+
+    Returns:
+        pd.DataFrame with columns: smiles, tg_k, source, canonical_smiles, split.
+    """
+    import pandas as pd
+
+    if parquet_path is None:
+        parquet_path = str(
+            Path(__file__).resolve().parent.parent.parent
+            / "data" / "unified_tg.parquet"
+        )
+
+    df = pd.read_parquet(parquet_path)
+    if split is not None:
+        df = df[df["split"] == split].reset_index(drop=True)
+    return df
+
+
+# ---------------------------------------------------------------------------
 # Backward compatibility — LOADERS dict for legacy code
 # ---------------------------------------------------------------------------
 

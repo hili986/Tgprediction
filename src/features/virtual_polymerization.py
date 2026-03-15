@@ -19,7 +19,7 @@ Public API:
 
 from typing import Dict, List, Optional
 
-from rdkit import Chem
+from rdkit import Chem, RDLogger
 from rdkit.Chem import Descriptors
 
 
@@ -56,7 +56,8 @@ _CORE_FUNCS = {
 # Oligomer assembly
 # ---------------------------------------------------------------------------
 
-def build_oligomer(repeat_smiles: str, n: int = 3) -> Optional[str]:
+def build_oligomer(repeat_smiles: str, n: int = 3,
+                   _suppress_log: bool = True) -> Optional[str]:
     """Assemble n copies of repeat unit into an oligomer SMILES.
 
     Algorithm:
@@ -68,10 +69,25 @@ def build_oligomer(repeat_smiles: str, n: int = 3) -> Optional[str]:
     Args:
         repeat_smiles: SMILES with * marking attachment points.
         n: Number of repeat units (default 3).
+        _suppress_log: Internal flag. Set False when caller already manages
+            RDKit log suppression (avoids nested Enable undoing outer Disable).
 
     Returns:
         Canonical SMILES of the oligomer, or None if assembly fails.
     """
+    # NOTE: DisableLog/EnableLog is process-global, not thread-safe.
+    # If parallel VPD computation is needed, use a lock + refcount pattern.
+    if _suppress_log:
+        RDLogger.DisableLog('rdApp.*')
+    try:
+        return _build_oligomer_impl(repeat_smiles, n)
+    finally:
+        if _suppress_log:
+            RDLogger.EnableLog('rdApp.*')
+
+
+def _build_oligomer_impl(repeat_smiles: str, n: int) -> Optional[str]:
+    """Internal implementation of build_oligomer (no log suppression)."""
     mol = Chem.MolFromSmiles(repeat_smiles)
     if mol is None:
         return _fallback_oligomer(repeat_smiles, n)
@@ -130,17 +146,37 @@ def _get_attachment_info(mol, dummy_idx):
 
 
 def _fallback_oligomer(smiles: str, n: int) -> Optional[str]:
-    """Fallback: string concatenation for *-free or failed assembly."""
-    clean = smiles.replace("*", "")
-    if not clean:
+    """Fallback: hydrogen-capped monomer repeat for failed assembly.
+
+    Strategy (ordered by quality):
+      1. Replace * with [H] (proper capping) and repeat n times
+      2. If that fails, try single capped monomer (n=1)
+      3. Return None as last resort
+    """
+    # Strategy 1: H-cap + repeat
+    capped = smiles.replace("[*]", "[H]").replace("*", "[H]")
+    if not capped or capped == smiles:
         return None
     try:
-        repeated = clean * n
-        mol = Chem.MolFromSmiles(repeated)
+        mol = Chem.MolFromSmiles(capped)
+        if mol is not None:
+            # For n>1, combine n copies via CombineMols
+            # CombineMols returns disconnected fragments; MolToSmiles handles directly
+            combined = mol
+            for _ in range(n - 1):
+                combined = Chem.CombineMols(combined, mol)
+            return Chem.MolToSmiles(combined)
+    except Exception:
+        pass
+
+    # Strategy 2: single capped monomer (still better than None)
+    try:
+        mol = Chem.MolFromSmiles(capped)
         if mol is not None:
             return Chem.MolToSmiles(mol)
     except Exception:
         pass
+
     return None
 
 
@@ -229,18 +265,27 @@ def compute_vpd(smiles: str) -> Dict[str, float]:
     Returns:
         Dict with 12 feature values.
     """
+    RDLogger.DisableLog('rdApp.*')
+    try:
+        return _compute_vpd_impl(smiles)
+    finally:
+        RDLogger.EnableLog('rdApp.*')
+
+
+def _compute_vpd_impl(smiles: str) -> Dict[str, float]:
+    """Internal VPD computation (called with RDKit logging suppressed)."""
     # Monomer descriptors (capped with [H])
-    mono_smiles = smiles.replace("*", "[H]")
+    mono_smiles = smiles.replace("[*]", "[H]").replace("*", "[H]")
     mono_descs = _compute_core_descs(mono_smiles)
 
-    # Dimer for delta computation
-    dimer_smiles = build_oligomer(smiles, n=2)
+    # Dimer for delta computation (suppress_log=False: caller already manages)
+    dimer_smiles = build_oligomer(smiles, n=2, _suppress_log=False)
     dimer_descs = (
         _compute_core_descs(dimer_smiles) if dimer_smiles else mono_descs
     )
 
-    # Trimer for per-RU computation
-    trimer_smiles = build_oligomer(smiles, n=3)
+    # Trimer for per-RU computation (suppress_log=False: caller already manages)
+    trimer_smiles = build_oligomer(smiles, n=3, _suppress_log=False)
     trimer_descs = (
         _compute_core_descs(trimer_smiles) if trimer_smiles else mono_descs
     )

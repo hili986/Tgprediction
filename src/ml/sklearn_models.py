@@ -1,18 +1,23 @@
 """
-Sklearn-based ML Models for Tg Prediction
-基于 sklearn 的 Tg 预测模型库
+Sklearn-based ML Models for Tg Prediction (Phase 5 — Algorithm Restructure)
+基于 sklearn 的 Tg 预测模型库（Phase 5 — 算法重构）
 
 Provides:
-    1. Model zoo: ExtraTrees, GBR, SVR, KRR, Ridge
+    1. Model zoo: CatBoost, LightGBM, XGBoost, ExtraTrees, GBR, SVR, Ridge
     2. Preprocessing pipeline: PowerTransformer + MinMaxScaler
-    3. Stacking ensemble: ExtraTrees + GBR + SVR → Ridge
-    4. Hyperparameter search space definitions
+    3. Stacking v1 (legacy): ExtraTrees + GBR + SVR → Ridge
+    4. Stacking v2 (new): CatBoost + LightGBM + ExtraTrees + TabPFN → Ridge
+    5. Optuna-compatible search spaces for each model
+    6. TabPFN v2 zero-tuning wrapper
 
 Public API:
     get_model_zoo()          → dict of name → (estimator, param_grid)
     build_preprocessing()    → sklearn Pipeline (PowerTransformer + MinMaxScaler)
-    build_stacking_model()   → StackingRegressor
+    build_stacking_model()   → StackingRegressor (legacy v1)
+    build_stacking_v2()      → StackingRegressor (Phase 5 new)
     get_search_space(name)   → dict of param distributions
+    get_estimator(name)      → fresh estimator instance
+    suggest_optuna_params()  → Optuna trial → params dict
 """
 
 import numpy as np
@@ -26,7 +31,11 @@ from sklearn.kernel_ridge import KernelRidge
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import PowerTransformer, MinMaxScaler
-from typing import Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from catboost import CatBoostRegressor
+from lightgbm import LGBMRegressor
+from xgboost import XGBRegressor
 
 
 # ---------------------------------------------------------------------------
@@ -52,16 +61,78 @@ def build_preprocessing() -> Pipeline:
 
 def get_model_zoo() -> Dict[str, Tuple[Any, Dict[str, Any]]]:
     """Return dict of model_name → (estimator_instance, default_params).
-    返回模型名 → (估计器实例, 默认参数) 的字典。
+    返回模型名 → (估计器实例, 默认参数搜索空间) 的字典。
 
-    Models included (ranked by literature for ~300 sample datasets):
-        1. ExtraTrees — SOTA for small polymer datasets
-        2. GBR — strong baseline, good interpretability
-        3. SVR — kernel-based, good with proper scaling
-        4. KRR — kernel ridge, alternative to SVR
-        5. Ridge — linear baseline / meta-learner for stacking
+    Models (ranked by expected performance on ~7K samples):
+        1. CatBoost — ordered boosting, top for 2K-10K datasets
+        2. LightGBM — histogram-based, fast training
+        3. XGBoost — mature GBDT, strong baseline
+        4. ExtraTrees — randomized splits, robust on small data
+        5. GBR — sklearn gradient boosting baseline
+        6. SVR — kernel-based, good with proper scaling
+        7. KRR — kernel ridge, alternative to SVR
+        8. Ridge — linear baseline / meta-learner for stacking
     """
     return {
+        # --- Phase 5 新增模型 ---
+        "CatBoost": (
+            CatBoostRegressor(
+                iterations=1000,
+                learning_rate=0.05,
+                depth=6,
+                l2_leaf_reg=3.0,
+                random_seed=42,
+                verbose=0,
+            ),
+            {
+                "iterations": [500, 800, 1000, 1500],
+                "learning_rate": [0.01, 0.03, 0.05, 0.1],
+                "depth": [4, 5, 6, 7, 8],
+                "l2_leaf_reg": [1.0, 3.0, 5.0, 10.0],
+                "subsample": [0.7, 0.8, 0.9, 1.0],
+            },
+        ),
+        "LightGBM": (
+            LGBMRegressor(
+                n_estimators=1000,
+                learning_rate=0.05,
+                num_leaves=31,
+                min_child_samples=20,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=42,
+                verbose=-1,
+            ),
+            {
+                "n_estimators": [500, 800, 1000, 1500],
+                "learning_rate": [0.01, 0.03, 0.05, 0.1],
+                "num_leaves": [15, 31, 63, 127],
+                "min_child_samples": [5, 10, 20, 30],
+                "subsample": [0.7, 0.8, 0.9],
+                "colsample_bytree": [0.6, 0.8, 1.0],
+            },
+        ),
+        "XGBoost": (
+            XGBRegressor(
+                n_estimators=1000,
+                learning_rate=0.05,
+                max_depth=6,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=42,
+                verbosity=0,
+            ),
+            {
+                "n_estimators": [500, 800, 1000, 1500],
+                "learning_rate": [0.01, 0.03, 0.05, 0.1],
+                "max_depth": [4, 5, 6, 7, 8],
+                "subsample": [0.7, 0.8, 0.9],
+                "colsample_bytree": [0.6, 0.8, 1.0],
+                "reg_alpha": [0.0, 0.1, 1.0],
+                "reg_lambda": [1.0, 3.0, 5.0],
+            },
+        ),
+        # --- Phase 4 保留模型（消融对比） ---
         "ExtraTrees": (
             ExtraTreesRegressor(
                 n_estimators=500,
@@ -120,7 +191,82 @@ def get_model_zoo() -> Dict[str, Tuple[Any, Dict[str, Any]]]:
 
 
 # ---------------------------------------------------------------------------
-# 3. Stacking ensemble / 堆叠集成
+# 3. Optuna search space / Optuna 搜索空间
+# ---------------------------------------------------------------------------
+
+def suggest_optuna_params(trial, model_name: str) -> Dict[str, Any]:
+    """Suggest hyperparameters from an Optuna trial for a given model.
+    从 Optuna trial 中为给定模型建议超参数。
+
+    Args:
+        trial: optuna.Trial instance.
+        model_name: One of the model zoo keys.
+
+    Returns:
+        Dict of param_name → suggested value.
+    """
+    if model_name == "CatBoost":
+        return {
+            "iterations": trial.suggest_int("iterations", 300, 2000),
+            "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.2, log=True),
+            "depth": trial.suggest_int("depth", 3, 9),
+            "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 0.1, 20.0, log=True),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "random_seed": 42,
+            "verbose": 0,
+        }
+    elif model_name == "LightGBM":
+        return {
+            "n_estimators": trial.suggest_int("n_estimators", 300, 2000),
+            "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.2, log=True),
+            "num_leaves": trial.suggest_int("num_leaves", 15, 255),
+            "min_child_samples": trial.suggest_int("min_child_samples", 5, 50),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
+            "random_state": 42,
+            "verbose": -1,
+        }
+    elif model_name == "XGBoost":
+        return {
+            "n_estimators": trial.suggest_int("n_estimators", 300, 2000),
+            "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.2, log=True),
+            "max_depth": trial.suggest_int("max_depth", 3, 9),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
+            "random_state": 42,
+            "verbosity": 0,
+        }
+    elif model_name == "ExtraTrees":
+        return {
+            "n_estimators": trial.suggest_int("n_estimators", 200, 1000),
+            "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2", 0.3, 0.5]),
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 10),
+            "max_depth": trial.suggest_categorical("max_depth", [None, 15, 20, 30, 50]),
+            "random_state": 42,
+            "n_jobs": -1,
+        }
+    elif model_name == "GBR":
+        return {
+            "n_estimators": trial.suggest_int("n_estimators", 100, 800),
+            "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.2, log=True),
+            "max_depth": trial.suggest_int("max_depth", 3, 8),
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 2, 15),
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            "random_state": 42,
+        }
+    else:
+        raise ValueError(
+            f"Optuna search space not defined for: {model_name}. "
+            f"Available: CatBoost, LightGBM, XGBoost, ExtraTrees, GBR"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 4. Stacking v1 (legacy) / 堆叠集成 v1（旧版）
 # ---------------------------------------------------------------------------
 
 def build_stacking_model(
@@ -130,39 +276,24 @@ def build_stacking_model(
     meta_alpha: float = 1.0,
     cv: int = 3,
 ) -> StackingRegressor:
-    """Build Stacking ensemble: ExtraTrees + GBR + SVR → Ridge meta-learner.
-    构建 Stacking 集成：ExtraTrees + GBR + SVR → Ridge 元学习器。
+    """Build Stacking v1: ExtraTrees + GBR + SVR → Ridge meta-learner.
+    构建 Stacking v1：ExtraTrees + GBR + SVR → Ridge 元学习器（Phase 4 遗留）。
 
-    Args:
-        et_params: Override ExtraTrees params.
-        gbr_params: Override GBR params.
-        svr_params: Override SVR params.
-        meta_alpha: Ridge alpha for meta-learner.
-        cv: Number of CV folds for stacking.
+    Note: This failed 3 times on 304 samples. Kept for backward compatibility.
 
     Returns:
         StackingRegressor ready for fit/predict.
     """
     et_defaults = {
-        "n_estimators": 500,
-        "max_features": "sqrt",
-        "min_samples_leaf": 2,
-        "random_state": 42,
-        "n_jobs": -1,
+        "n_estimators": 500, "max_features": "sqrt",
+        "min_samples_leaf": 2, "random_state": 42, "n_jobs": -1,
     }
     gbr_defaults = {
-        "n_estimators": 300,
-        "learning_rate": 0.05,
-        "max_depth": 4,
-        "min_samples_leaf": 5,
-        "subsample": 0.8,
-        "random_state": 42,
+        "n_estimators": 300, "learning_rate": 0.05, "max_depth": 4,
+        "min_samples_leaf": 5, "subsample": 0.8, "random_state": 42,
     }
     svr_defaults = {
-        "kernel": "rbf",
-        "C": 100,
-        "gamma": "scale",
-        "epsilon": 0.1,
+        "kernel": "rbf", "C": 100, "gamma": "scale", "epsilon": 0.1,
     }
 
     et = ExtraTreesRegressor(**(et_defaults | (et_params or {})))
@@ -170,11 +301,7 @@ def build_stacking_model(
     svr = SVR(**(svr_defaults | (svr_params or {})))
 
     return StackingRegressor(
-        estimators=[
-            ("et", et),
-            ("gbr", gbr),
-            ("svr", svr),
-        ],
+        estimators=[("et", et), ("gbr", gbr), ("svr", svr)],
         final_estimator=Ridge(alpha=meta_alpha),
         cv=cv,
         n_jobs=-1,
@@ -182,18 +309,87 @@ def build_stacking_model(
 
 
 # ---------------------------------------------------------------------------
-# 4. Hyperparameter search spaces / 超参数搜索空间
+# 5. Stacking v2 (Phase 5) / 堆叠集成 v2
+# ---------------------------------------------------------------------------
+
+def build_stacking_v2(
+    catboost_params: Dict[str, Any] | None = None,
+    lgbm_params: Dict[str, Any] | None = None,
+    et_params: Dict[str, Any] | None = None,
+    xgb_params: Dict[str, Any] | None = None,
+    meta_alpha: float = 1.0,
+    cv: int = 5,
+    passthrough: bool = False,
+) -> StackingRegressor:
+    """Build Stacking v2: CatBoost + LightGBM + ExtraTrees + XGBoost → Ridge.
+    构建 Stacking v2：CatBoost + LightGBM + ExtraTrees + XGBoost → Ridge。
+
+    Designed for ~7.5K samples (Phase 5 dataset). Stacking finally feasible
+    with 25x more data than Phase 4's 304 samples where it failed 3 times.
+
+    Args:
+        catboost_params: Override CatBoost params.
+        lgbm_params: Override LightGBM params.
+        et_params: Override ExtraTrees params.
+        xgb_params: Override XGBoost params.
+        meta_alpha: Ridge alpha for meta-learner.
+        cv: Number of CV folds for stacking.
+        passthrough: Whether to pass original features to meta-learner.
+
+    Returns:
+        StackingRegressor ready for fit/predict.
+    """
+    cb_defaults = {
+        "iterations": 1000, "learning_rate": 0.05, "depth": 6,
+        "l2_leaf_reg": 3.0, "random_seed": 42, "verbose": 0,
+    }
+    lgbm_defaults = {
+        "n_estimators": 1000, "learning_rate": 0.05, "num_leaves": 31,
+        "min_child_samples": 20, "subsample": 0.8, "colsample_bytree": 0.8,
+        "random_state": 42, "verbose": -1,
+    }
+    et_defaults = {
+        "n_estimators": 500, "max_features": "sqrt",
+        "min_samples_leaf": 2, "random_state": 42, "n_jobs": -1,
+    }
+    xgb_defaults = {
+        "n_estimators": 1000, "learning_rate": 0.05, "max_depth": 6,
+        "subsample": 0.8, "colsample_bytree": 0.8,
+        "random_state": 42, "verbosity": 0,
+    }
+
+    cb = CatBoostRegressor(**(cb_defaults | (catboost_params or {})))
+    lgbm = LGBMRegressor(**(lgbm_defaults | (lgbm_params or {})))
+    et = ExtraTreesRegressor(**(et_defaults | (et_params or {})))
+    xgb = XGBRegressor(**(xgb_defaults | (xgb_params or {})))
+
+    return StackingRegressor(
+        estimators=[
+            ("catboost", cb),
+            ("lgbm", lgbm),
+            ("et", et),
+            ("xgb", xgb),
+        ],
+        final_estimator=Ridge(alpha=meta_alpha),
+        cv=cv,
+        passthrough=passthrough,
+        n_jobs=-1,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 6. Utility functions / 工具函数
 # ---------------------------------------------------------------------------
 
 def get_search_space(model_name: str) -> Dict[str, Any]:
     """Return hyperparameter search space for a given model.
-    返回给定模型的超参数搜索空间。
+    返回给定模型的超参数搜索空间（用于 RandomizedSearchCV / GridSearchCV）。
 
     Args:
-        model_name: One of 'ExtraTrees', 'GBR', 'SVR', 'KRR', 'Ridge'.
+        model_name: One of the model zoo keys.
 
     Returns:
-        Dict of param_name → list of values for GridSearchCV/RandomizedSearchCV.
+        Dict of param_name → list of values.
     """
     zoo = get_model_zoo()
     if model_name not in zoo:
@@ -212,7 +408,7 @@ def get_estimator(model_name: str, **overrides) -> Any:
         **overrides: Parameter overrides.
 
     Returns:
-        sklearn estimator instance.
+        sklearn-compatible estimator instance.
     """
     zoo = get_model_zoo()
     if model_name not in zoo:
@@ -223,3 +419,10 @@ def get_estimator(model_name: str, **overrides) -> Any:
     if overrides:
         estimator.set_params(**overrides)
     return estimator
+
+
+def available_models() -> List[str]:
+    """Return list of available model names.
+    返回可用模型名列表。
+    """
+    return list(get_model_zoo().keys())
