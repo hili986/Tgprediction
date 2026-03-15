@@ -1113,11 +1113,15 @@ def run_e31_deep_ensemble(
         smiles_test, y_list=y_test.tolist(),
     )
     if tab_test is not None:
+        tab_idx_map_test = {orig: pos for pos, orig in enumerate(tab_valid_test)}
         for i, g in enumerate(test_graphs):
             orig_i = test_valid[i]
-            g.tabular = torch.tensor(
-                tab_test[orig_i], dtype=torch.float
-            ).unsqueeze(0)
+            if orig_i in tab_idx_map_test:
+                g.tabular = torch.tensor(
+                    tab_test[tab_idx_map_test[orig_i]], dtype=torch.float
+                ).unsqueeze(0)
+            else:
+                g.tabular = torch.zeros(1, TABULAR_DIM, dtype=torch.float)
 
     test_loader = DataLoader(
         test_graphs, batch_size=BATCH_SIZE_FINETUNE, shuffle=False
