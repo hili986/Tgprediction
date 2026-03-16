@@ -258,8 +258,13 @@ def build_pretrain_data(
         print("  Layer 2: Fox 虚拟共聚物...")
     fox_data = generate_copolymer_data(max_samples=50000)
     for entry in fox_data:
-        smiles_all.append(entry["smiles"])
-        tg_all.append(entry["tg"])
+        # Fox generator returns smiles1/smiles2 for copolymer components;
+        # use smiles1 (dominant component) as representative monomer SMILES
+        smi = entry.get("smiles", entry.get("smiles1"))
+        tg = entry.get("tg", entry.get("tg_virtual"))
+        if smi is not None and tg is not None:
+            smiles_all.append(smi)
+            tg_all.append(tg)
     if verbose:
         print(f"  Layer 2: {len(fox_data)} 条")
 
