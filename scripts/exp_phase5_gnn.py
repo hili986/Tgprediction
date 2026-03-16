@@ -410,6 +410,7 @@ def extract_gnn_embeddings(
         (embeddings [N, 64], valid_indices).
     """
     import torch
+    from torch_geometric.data import Batch
     from src.gnn.graph_builder import smiles_to_graph
 
     model = trainer.model
@@ -423,8 +424,9 @@ def extract_gnn_embeddings(
             graph = smiles_to_graph(smi)
             if graph is None:
                 continue
-            graph = graph.to(device)
-            emb = model.get_embedding(graph)  # [1, 64]
+            # Wrap single graph in a Batch so batch tensor is set
+            batched = Batch.from_data_list([graph]).to(device)
+            emb = model.get_embedding(batched)  # [1, 64]
             embeddings.append(emb.squeeze(0).cpu().numpy())
             valid_idx.append(i)
 
