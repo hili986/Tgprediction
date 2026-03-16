@@ -72,31 +72,36 @@ OUTER_REPEATS = 3
 # Lazy imports — only import GNN/torch when actually needed
 # ---------------------------------------------------------------------------
 
-def _build_stacking_b2():
+def _build_stacking_b2(skip_tabpfn: bool = False):
     """Build Stacking per 方案B.2: CatBoost + TabPFN v2 + LightGBM + ExtraTrees → Ridge.
 
     Per B.8, src/ml/ files are not modified. This builds the correct stacking
     with TabPFN v2 as specified in 方案B lines 194-198.
 
-    Falls back to build_stacking_v2() (XGBoost) if TabPFN is not installed.
+    Falls back to build_stacking_v2() (XGBoost) if TabPFN is not available.
+
+    Args:
+        skip_tabpfn: Force skip TabPFN (--no-tabpfn flag). Saves ~15GB GPU memory.
 
     Returns:
         Tuple of (StackingRegressor, base_model_names: list[str]).
     """
-    # Try TabPFN: import + verify model actually loads (server may lack network)
     use_tabpfn = False
-    try:
-        from tabpfn import TabPFNRegressor
-        import numpy as _np
-        _test_pfn = TabPFNRegressor()
-        _test_pfn.fit(_np.random.randn(10, 3), _np.random.randn(10))
-        _test_pfn.predict(_np.random.randn(3, 3))
-        # Force offline mode so joblib subprocesses use cached model
-        os.environ["HF_HUB_OFFLINE"] = "1"
-        use_tabpfn = True
-        print("  TabPFN v2 可用 (已设置离线模式)")
-    except Exception as _e:
-        print(f"  [!] TabPFN 不可用 ({type(_e).__name__}), 回退到 XGBoost")
+    if skip_tabpfn:
+        print("  [!] TabPFN 已跳过 (--no-tabpfn), 使用 XGBoost 替代")
+    else:
+        # Try TabPFN: import + verify model actually loads
+        try:
+            from tabpfn import TabPFNRegressor
+            import numpy as _np
+            _test_pfn = TabPFNRegressor()
+            _test_pfn.fit(_np.random.randn(10, 3), _np.random.randn(10))
+            _test_pfn.predict(_np.random.randn(3, 3))
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            use_tabpfn = True
+            print("  TabPFN v2 可用 (已设置离线模式)")
+        except Exception as _e:
+            print(f"  [!] TabPFN 不可用 ({type(_e).__name__}), 回退到 XGBoost")
 
     if not use_tabpfn:
         from src.ml.sklearn_models import build_stacking_v2
@@ -690,6 +695,7 @@ def run_e28_fusion_stacking(
     device: str = "cuda",
     pretrain_epochs: int = PRETRAIN_EPOCHS,
     finetune_epochs: int = FINETUNE_EPOCHS,
+    skip_tabpfn: bool = False,
 ) -> Dict[str, Any]:
     """E28: 110d → Stacking v2 (with TabPFN v2) — CORE EXPERIMENT."""
     print(f"\n{'='*60}")
@@ -745,7 +751,7 @@ def run_e28_fusion_stacking(
     )
 
     # Stacking per 方案B.2: CatBoost + TabPFN v2 + LightGBM + ExtraTrees → Ridge
-    stacking, base_model_names = _build_stacking_b2()
+    stacking, base_model_names = _build_stacking_b2(skip_tabpfn=skip_tabpfn)
     cv_result = simple_cv(
         X_train_fused, y_train_fused, stacking,
         n_splits=OUTER_SPLITS, n_repeats=OUTER_REPEATS,
@@ -776,6 +782,7 @@ def run_e29_vpd_deep(
     smiles_train: List[str], y_train: np.ndarray,
     smiles_test: List[str], y_test: np.ndarray,
     pretrain_smiles: List[str], pretrain_tg: List[float],
+    skip_tabpfn: bool = False,
     device: str = "cuda",
     pretrain_epochs: int = PRETRAIN_EPOCHS,
     finetune_epochs: int = FINETUNE_EPOCHS,
@@ -844,7 +851,7 @@ def run_e29_vpd_deep(
     X_test_fused[:, :l1h_dim] = pp.transform(X_test_fused[:, :l1h_dim])
 
     # Stacking per 方案B.2
-    stacking, _ = _build_stacking_b2()
+    stacking, _ = _build_stacking_b2(skip_tabpfn=skip_tabpfn)
     cv_result = simple_cv(
         X_train_fused, y_train_fused, stacking,
         n_splits=OUTER_SPLITS, n_repeats=OUTER_REPEATS,
@@ -873,6 +880,7 @@ def run_e30_multitask(
     smiles_train: List[str], y_train: np.ndarray,
     smiles_test: List[str], y_test: np.ndarray,
     pretrain_smiles: List[str], pretrain_tg: List[float],
+    skip_tabpfn: bool = False,
     device: str = "cuda",
     pretrain_epochs: int = PRETRAIN_EPOCHS,
     finetune_epochs: int = FINETUNE_EPOCHS,
@@ -1006,7 +1014,7 @@ def run_e30_multitask(
     )
 
     # Stacking per 方案B.2
-    stacking, base_names = _build_stacking_b2()
+    stacking, base_names = _build_stacking_b2(skip_tabpfn=skip_tabpfn)
     cv_result = simple_cv(
         X_train_fused, y_train_fused, stacking,
         n_splits=OUTER_SPLITS, n_repeats=OUTER_REPEATS,
@@ -1313,6 +1321,10 @@ def main():
         "--skip-pretrain-data", action="store_true",
         help="Skip building pretrain data (for E25 only)."
     )
+    parser.add_argument(
+        "--no-tabpfn", action="store_true",
+        help="Disable TabPFN in Stacking (use XGBoost fallback). Saves ~15GB GPU memory."
+    )
     args = parser.parse_args()
 
     # Validate environment
@@ -1395,11 +1407,13 @@ def main():
                     device=device,
                     pretrain_epochs=args.pretrain_epochs,
                     finetune_epochs=args.finetune_epochs,
+                    skip_tabpfn=args.no_tabpfn,
                 )
             elif exp_id == "E29":
                 result = run_e29_vpd_deep(
                     smiles_train, y_train, smiles_test, y_test,
                     pretrain_smiles, pretrain_tg,
+                    skip_tabpfn=args.no_tabpfn,
                     device=device,
                     pretrain_epochs=args.pretrain_epochs,
                     finetune_epochs=args.finetune_epochs,
@@ -1408,6 +1422,7 @@ def main():
                 result = run_e30_multitask(
                     smiles_train, y_train, smiles_test, y_test,
                     pretrain_smiles, pretrain_tg,
+                    skip_tabpfn=args.no_tabpfn,
                     device=device,
                     pretrain_epochs=args.pretrain_epochs,
                     finetune_epochs=args.finetune_epochs,
