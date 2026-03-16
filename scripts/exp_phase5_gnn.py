@@ -83,14 +83,22 @@ def _build_stacking_b2():
     Returns:
         Tuple of (StackingRegressor, base_model_names: list[str]).
     """
+    # Try TabPFN: import + verify model actually loads (server may lack network)
+    use_tabpfn = False
     try:
         from tabpfn import TabPFNRegressor
+        import numpy as _np
+        _test_pfn = TabPFNRegressor()
+        _test_pfn.fit(_np.random.randn(10, 3), _np.random.randn(10))
+        _test_pfn.predict(_np.random.randn(3, 3))
+        # Force offline mode so joblib subprocesses use cached model
+        os.environ["HF_HUB_OFFLINE"] = "1"
         use_tabpfn = True
-    except ImportError:
-        use_tabpfn = False
+        print("  TabPFN v2 可用 (已设置离线模式)")
+    except Exception as _e:
+        print(f"  [!] TabPFN 不可用 ({type(_e).__name__}), 回退到 XGBoost")
 
     if not use_tabpfn:
-        print("  [!] TabPFN 未安装，回退到 XGBoost (build_stacking_v2)")
         from src.ml.sklearn_models import build_stacking_v2
         stacking = build_stacking_v2()
         return stacking, ["CatBoost", "LightGBM", "ExtraTrees", "XGBoost"]
@@ -239,34 +247,47 @@ def build_pretrain_data(
     from src.data.external_datasets import load_all_external
     from src.data.fox_copolymer_generator import generate_copolymer_data
 
-    smiles_all = []
-    tg_all = []
+    # Collect Layer 1 (experimental) — subject to anti-leak filtering
+    exp_smiles = []
+    exp_tg = []
 
-    # Layer 1: Experimental homopolymers (~13,400)
     if verbose:
         print("\n  --- 预训练数据构建 ---")
         print("  Layer 1: 实验均聚物...")
     external = load_all_external(verbose=verbose)
     for entry in external:
-        smiles_all.append(entry["smiles"])
-        tg_all.append(entry["tg_k"])
+        exp_smiles.append(entry["smiles"])
+        exp_tg.append(entry["tg_k"])
     if verbose:
         print(f"  Layer 1: {len(external)} 条")
 
-    # Layer 2: Fox virtual copolymers (~46,000)
+    # Anti-leak: only filter Layer 1 (experimental data)
+    if exclude_smiles:
+        before = len(exp_smiles)
+        filtered = [
+            (s, t) for s, t in zip(exp_smiles, exp_tg)
+            if s not in exclude_smiles
+        ]
+        exp_smiles = [s for s, _ in filtered]
+        exp_tg = [t for _, t in filtered]
+        if verbose:
+            print(f"  防泄漏: Layer 1 排除 {before - len(exp_smiles)} 条重叠 SMILES, 保留 {len(exp_smiles)} 条")
+
+    smiles_all = list(exp_smiles)
+    tg_all = list(exp_tg)
+
+    # Layer 2: Fox virtual copolymers (~46,000) — synthetic, NO anti-leak needed
     if verbose:
         print("  Layer 2: Fox 虚拟共聚物...")
     fox_data = generate_copolymer_data(max_samples=50000)
     for entry in fox_data:
-        # Fox generator returns smiles1/smiles2 for copolymer components;
-        # use smiles1 (dominant component) as representative monomer SMILES
         smi = entry.get("smiles", entry.get("smiles1"))
         tg = entry.get("tg", entry.get("tg_virtual"))
         if smi is not None and tg is not None:
             smiles_all.append(smi)
             tg_all.append(tg)
     if verbose:
-        print(f"  Layer 2: {len(fox_data)} 条")
+        print(f"  Layer 2: {len(fox_data)} 条 (虚拟数据, 不过滤)")
 
     # Layer 3: Kuenneth copolymers (OPTIONAL, default OFF)
     if include_layer3:
@@ -282,20 +303,8 @@ def build_pretrain_data(
     elif verbose:
         print("  Layer 3: Kuenneth 共聚物 — 跳过 (使用 --layer3 启用)")
 
-    # Anti-leak: exclude target dataset SMILES
-    if exclude_smiles:
-        before = len(smiles_all)
-        filtered = [
-            (s, t) for s, t in zip(smiles_all, tg_all)
-            if s not in exclude_smiles
-        ]
-        smiles_all = [s for s, _ in filtered]
-        tg_all = [t for _, t in filtered]
-        if verbose:
-            print(f"  防泄漏: 排除 {before - len(smiles_all)} 条重叠 SMILES")
-
     if verbose:
-        print(f"  预训练总计: {len(smiles_all)} 条")
+        print(f"  预训练总计: {len(smiles_all)} 条 (Layer1: {len(exp_smiles)}, Layer2: {len(fox_data)})")
 
     return smiles_all, tg_all
 
