@@ -41,6 +41,7 @@ Thumbs.db
 
 # Temp/generated files
 _write_report.py
+_write_full_report.py
 gen_report.py
 MEMORY.md
 catboost_info/

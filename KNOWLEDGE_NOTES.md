@@ -698,3 +698,164 @@
 - 修复方案：`os.environ["LOKY_MAX_CPU_COUNT"] = str(os.cpu_count())` 绕过 wmic 调用
 - Stacking 特别多警告是因为内部 3 个基模型 × CV 折叠，每次 joblib 启动都触发一次
 **相关概念**：进程管理, CPU 核心检测, 环境变量, Python warnings 模块
+
+### Tabular 特征索引对齐：过滤数组的隐蔽 Bug — 2026-03-15
+**来源**：Level 2 (深度讲解)
+**触发场景**：code-reviewer 发现 exp_phase5_gnn.py 中 HIGH 级别 Bug
+**分析过程**：
+- `load_tabular_features()` 对输入 SMILES 做 RDKit 规范化+去重过滤，返回 `(X_filtered[n_valid, D], feature_names, valid_indices[n_valid])`
+- `batch_smiles_to_graphs()` 同样过滤无效 SMILES，返回 `(graphs[], valid_idx[])`
+- Bug：代码用 `tabular_train[orig_i]` 直接索引过滤后的数组 — `orig_i` 是原始 SMILES 索引（可能=150），但 `tabular_train` 只有 n_valid 行（如 280 行，索引 0-279）。当 orig_i < n_valid 时静默取错数据（更危险），当 orig_i >= n_valid 时 IndexError
+- 修复模式：建立 `tab_idx_map = {orig_index: filtered_position}` 映射字典，安全查找
+**核心要点**：
+- **过滤后数组的索引语义改变**是常见 Bug 根源：原始索引 ≠ 过滤后位置索引
+- 两个独立过滤管道（tabular vs graph）的有效索引集合可能不一致，必须显式映射
+- `fuse_features()` 已正确实现了映射模式，但 `train_gnn_with_pretrain()`/E30/E31 遗漏了
+- 防御策略：过滤操作应同时返回"原始索引→新位置"的映射，而非仅返回有效索引列表
+- 静默数据错位比 IndexError 更危险 — 模型会在错误数据上训练，指标虚高但实际无效
+**相关概念**：数据对齐, 索引映射, 防御性编程, 数据管道一致性
+**推荐资源**：
+- Pandas .loc vs .iloc 的索引语义（同类问题在 Pandas 中也很常见）
+- PyG 的 Data.to_dict() 和 Batch 对象的索引管理机制
+
+### Tandem-M2M 架构：物理引导残差学习 — 2026-03-15
+**来源**：Level 2 (深度讲解)
+**触发场景**：实现方案B GNN 子包（src/gnn/）
+**分析过程**：
+- 传统 GNN 直接预测 Tg：Tg = f(graph)，缺乏物理先验
+- Tandem-M2M 设计：Tg = Tg_baseline + α × GNN_residual(graph, tabular)
+- α 是可学习参数（初始 0.5），让模型自己决定物理基线 vs 学习残差的权重
+- 3-layer GAT → GRIN 池化（只取中间重复单元）→ 64d 嵌入 → 与 46d tabular 拼接 → MLP → 残差
+**核心要点**：
+- **残差学习**比直接预测更容易训练：GNN 只需学"GC 基线没捕捉到的部分"
+- **GRIN 池化**（Repeat-Invariant）：3-RU 寡聚体中只池化中间 RU 的原子，左右 RU 提供上下文但不参与最终表示 — 理论保证了对任意长链的不变性
+- **可学习 α**：当预训练数据多时 α→0（信任 GNN），微调时 α→0.5（平衡物理/学习）
+- **两阶段训练**：Stage 1 全参数 + 大 LR（预训练），Stage 2 冻结前 2 层 GAT + 小 LR + 高 dropout（微调）— 防止小数据集过拟合
+- **Deep Ensemble ×5 + Conformal Prediction**：5 个不同种子的模型集成，标准差=认知不确定性，MAPIE 共形校准给出有保证覆盖率的预测区间
+**相关概念**：残差连接 (ResNet), 注意力机制 (GAT), 迁移学习, 不确定性量化, 共形预测
+**推荐资源**：
+- Veličković et al. 2018, "Graph Attention Networks" (GAT 原始论文)
+- Lakshminarayanan et al. 2017, "Simple and Scalable Predictive Uncertainty Estimation using Deep Ensembles"
+- MAPIE 文档: https://mapie.readthedocs.io/ (共形预测 Python 实现)
+
+### 特征工程的任务特异性：通用 vs 迁移预测的权衡 — 2026-03-15
+**来源**：Level 2 (深度讲解)
+**触发场景**：Phase 5B E26 核酸 Tg 预测实验
+**分析过程**：
+- Phase 4 发现 VPD（虚拟聚合描述符，12-dim）对通用 Tg 预测贡献 +4.6%（R²: 0.820 → 0.866）
+- Phase 5B E26 发现 M2M-V（含 VPD）对核苷酸预测反而比 L1H（不含 VPD）更差
+- 对比：L1H 在 ATP/ADP/AMP 上均值误差 3.9K vs M2M-V 均值 8.8K（同一模型 GBR，同一训练数据）
+- 原因分析：VPD 通过构建 3-RU（三重复单元）寡聚体提取聚合物级特征，对核苷酸这种小分子不适用
+- 核苷酸 SMILES 是单个分子，"虚拟聚合"产生的寡聚体结构与实际核苷酸无关
+**核心要点**：
+- **特征工程不是万能的**：提升通用任务的特征可能损害特定子任务（迁移预测）
+- VPD 特征对"聚合物 Tg 预测"有效，对"核苷酸小分子 Tg 迁移预测"有害
+- **最优策略是分场景选择特征**：通用预测用 M2M-V，核苷酸迁移用 L1H
+- 这是一个 bias-variance 问题：VPD 增加了与核苷酸无关的特征维度（噪声），小数据迁移场景下 variance 增大
+**相关概念**：特征选择, 迁移学习, bias-variance tradeoff, 领域适应
+**推荐资源**：
+- Pan & Yang 2010, "A Survey on Transfer Learning" (迁移学习中特征选择的重要性)
+- Bengio et al. 2013, "Representation Learning" (特征表示的通用性 vs 任务特异性)
+
+### TabPFN：零调参的 Transformer 表格模型 — 2026-03-15
+**来源**：Level 1 (同步)
+**触发场景**：Phase 5 E19 TabPFN 取得 R²=0.8955 的 SOTA 成绩
+**核心要点**：
+- TabPFN v2 是专为中小规模表格数据设计的 Transformer 模型
+- 核心思想：在海量合成数据集上预训练一个 "学会学习" 的元模型（meta-learning）
+- 推理时 TabPFN 把训练数据和测试数据一起输入，一次前向传播即输出预测（无显式训练过程）
+- 对 <10K 样本、<100 特征的表格任务，常常超越调参后的 GBDT
+- 局限：不支持 sample_weight，不支持增量训练，大数据集 (>10K) 可能不如 GBDT
+**相关概念**：元学习 (meta-learning), 上下文学习 (in-context learning), prior-data fitted networks
+
+
+### Tg 三大理论的统一图景 — 2026-03-24
+**来源**：Level 2 (深度讲解) — 学习计划第一阶段
+**触发场景**：系统性学习 Tg 物理本质
+**分析过程**：
+- 自由体积理论（f→0.025时冻结）、WLF/动力学理论（τ>>t_obs时冻结）、Gibbs-DiMarzio热力学理论（S_c→0时冻结）三者不矛盾
+- 自由体积 ↔ 构象熵正相关（更多空间→更多可访问构象）
+- Adam-Gibbs方程 τ = τ₀×exp(C/T×S_c) 直接桥接动力学与热力学
+- WLF 方程可从自由体积理论严格推导（Doolittle → WLF）
+**核心要点**：
+- 三大理论都指向同一个物理实质：链段柔性（能不能动）+ 分子间作用力（动的代价）
+- FlexibilityIndex 是 SHAP #1 (41.51) 的物理根源：链柔性 = Gibbs-DiMarzio 的 f 参数 = 自由体积理论的核心
+- 链柔性占 SHAP 总贡献 47%，分子间力 26%，环/刚性 21%
+- 单体描述符天花板 R²≈0.84 来自分子量分布、立构规整性、结晶度、加工条件等丢失信息
+**相关概念**：自由体积理论, WLF方程, Gibbs-DiMarzio, Adam-Gibbs CRR, Angell strong/fragile分类
+**推荐资源**：
+- Sperling, Introduction to Physical Polymer Science, Ch.8
+- Angell (1995) Science 267:1924 (strong/fragile分类)
+- Gibbs & DiMarzio (1958) J. Chem. Phys. 28:373
+
+### 三个原创特征假说 — 2026-03-24
+**来源**：Level 2 (深度讲解) — 学习计划第四阶段
+**触发场景**：基于物理理解提出创新特征
+**分析过程**：
+- 从 SHAP 分析发现 FlexibilityIndex 计数旋转键但不区分势垒高低，存在改进空间
+- 从 Gibbs-DiMarzio 理论发现构象熵未被任何现有特征直接编码
+- 从 Van Krevelen GC 法发现残差学习在 Tg 领域未被系统实证
+**核心要点**：
+- 假说1 (CES 构象熵描述符): 用 RDKit 3D 构象采样编码 Gibbs-DiMarzio 核心变量
+- 假说2 (RBP 旋转势垒代理): 按键类型加权旋转难度，比 FlexibilityIndex 更物理
+- 假说3 (GC 残差学习): 用基团贡献法提供物理基线，ML 只学残差
+- 推荐顺序: RBP (低成本) → GC残差 (中成本) → CES (高成本高创新)
+- 三者组合预期将 CatBoost R² 从 0.87 提升至 0.88-0.90
+**相关概念**：Gibbs-DiMarzio S_c→0, Schneider-DiMarzio M/f, Van Krevelen GC法
+**推荐资源**：
+- Schneider & DiMarzio (2006) J. Phys. Chem. B 110:451 (M/f模型)
+- Liu et al. (2020) ACS Omega 5:13367 (改进GC法 R²=0.99)
+
+### 多尺度信息金字塔与 Tg 预测天花板 — 2026-03-24
+**来源**：Level 2 (深度讲解) — 物理驱动算法重构方案设计
+**触发场景**：用户要求 R² > 0.95，需要从根本上分析天花板来源
+**分析过程**：
+- 发现当前所有方法的根本瓶颈是"尺度错配"——用原子/单体描述符预测链段/聚合物性质
+- 构建了 5 层物理尺度金字塔：原子→重复单元→链段→聚合物链→多链体系
+- 当前 M2M-V 46d 只覆盖了尺度 1-2（充分）和尺度 3（部分，通过 VPD）
+- 尺度 4-5 完全缺失（周期性结构、CRR、多链堆积）
+- 每个尺度对应一组 Tg 理论：自由体积(尺度2-3)、Gibbs-DiMarzio(尺度3)、Adam-Gibbs CRR(尺度4)
+**核心要点**：
+- R² ≈ 0.90 天花板不是数据量或模型能力问题，而是**信息缺失**
+- VPD 的 +4.6% 证明了跨尺度信息的价值（从单体到 3-mer）
+- 突破天花板需要系统性填补每个尺度的物理信息
+- 关键新特征：GM_f_chain(Gibbs-DiMarzio柔性)、CRR_z_star(协同运动尺度)、FV_fraction_3D(3D自由体积)
+- GNN 预训练编码尺度 4，polyBERT 编码尺度 5
+- R²=0.95 需要数据测量噪声 σ < 25K（需先估算验证可行性）
+**相关概念**：多尺度建模, 信息金字塔, Adam-Gibbs CRR, 持久长度, 自由体积
+**推荐资源**：
+- Adam & Gibbs (1965) J. Chem. Phys. 43:139 (CRR 原始论文)
+- Rubinstein & Colby, Polymer Physics, Ch.9 (持久长度、特征比)
+
+### 物理驱动特征设计的技术验证要点 — 2026-03-24
+**来源**：Level 2 (深度讲解) — 方案 v2 技术细节锤实
+**触发场景**：方案评估发现多处"伪物理"（凑公式、单位错误）需要修正
+**分析过程**：
+- 发现现有 Vf_estimate 使用 LabuteASA (面积) 除以 MolWt (质量)，单位物理无意义
+- 发现 CRR z* 估算公式 z*=l_p×(1+0.5×CED) 中 0.5 系数无依据 → 改为直接输出 l_p, C_n 让模型学
+- 调研 MMFF94 精度：47% 构象在 1 kcal/mol 内 (Halgren 基准)；芳基酰胺势垒严重过高 (Guba 2019)
+- C_∞ 从短链估算收敛为 n^(-1/2) (Mattice 2004)，5-mer 不够精确但作为排序代理足够
+- ETKDGv3 + useRandomCoords=True 使 3D 嵌入失败率接近零
+- Schneider-DiMarzio M/f 的柔性键规则：C-OH=0, C-CH3=0 (末端旋转不改变形状)
+**核心要点**：
+- 每个物理特征必须有可验证的单调性预测（如 N_eff ↑ → Tg ↓）
+- 不凑公式——能直接测量的物理量交给模型，不自己做非线性组合
+- Boltzmann N_eff = exp(-Σ pᵢ ln pᵢ) 是 Gibbs-DiMarzio f 参数的热力学正确估算
+- GC 法 ~25 基团 SMARTS 的简化版可实现 R² > 0.85 覆盖率 > 75%
+- 力场验证是 Phase C 的前置条件，不能跳过
+**相关概念**：MMFF94 精度, ETKDGv3 构象采样, Van Krevelen 基团分解, 特征比 C_n
+**推荐资源**：
+- Halgren (1996) MMFF94 验证: J. Comput. Chem. 17:587
+- Guba (2019) MMFF94s 修正: J. Cheminf. PMC6686419
+- Mattice (2004) C_n 收敛: Macromolecules 37:8057
+
+### 方案 v3 技术审查发现的关键问题 — 2026-03-24
+**来源**：Level 1 (同步) — 方案细节审查
+**触发场景**：逐行审查方案代码发现 5 个技术问题
+**核心要点**：
+- Cn_proxy 链端识别 bug: RDKit 原子索引顺序不保证是链首尾，必须用拓扑距离矩阵找最远原子对
+- GC 基团匹配双重计数: 大基团优先匹配 + 已覆盖原子不重复计数
+- RDKit 构象采样是 CPU 运算，A800 GPU 无法加速（GPU 只用于 GNN 预训练）
+- 当前 GC Yg 简化表对 PMMA、PVC 等含极性取代基的聚合物偏差极大，需要从 Cao 2020 SI 提取完整表
+- FV_estimate 现有实现用 LabuteASA(面积)/MolWt(质量) 单位物理无意义，需用 ComputeMolVolume(3D体积)
+**相关概念**：RDKit 原子索引, SMARTS 匹配优先级, 基团贡献法 Yg 表
