@@ -2,6 +2,10 @@
 Chain Segment Physics Features — N_eff + Cn_proxy from 3-mer conformational sampling
 链段物理特征 — 3-mer 构象采样得到 Boltzmann N_eff + 链刚性代理
 
+Energy backend:
+  Default: AIMNet2 (GPU, pip install aimnet2calc)
+  Fallback: MMFF94 (CPU, RDKit built-in)
+
 8 features from a single 3-mer + 50 conformers computation:
   Neff_300K:      Boltzmann effective conformer count at 300K (Gibbs-DiMarzio)
   Neff_500K:      Boltzmann effective conformer count at 500K
@@ -12,18 +16,13 @@ Chain Segment Physics Features — N_eff + Cn_proxy from 3-mer conformational sa
   curl_variance:  std(R_ee) / mean(R_ee) (conformational plasticity)
   oligomer_level: meta-feature (0=failed, 3=3-mer success)
 
-Physical predictions:
-  Neff_300K vs Tg:  negative correlation (flexible → many conformers → low Tg)
-  Cn_proxy vs Tg:   positive correlation (stiff → high Cn → high Tg)
-
-Source: 方案待选-物理驱动多尺度算法重构.md §2.2, §2.5
-
 Public API:
     compute_3mer_physics(smiles, n_confs=50) -> dict (8 features)
     chain_physics_feature_names() -> list[str]
 """
 
-from typing import Dict, List
+import warnings
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from rdkit import Chem
@@ -47,6 +46,124 @@ _NAN_RESULT = {name: float("nan") for name in FEATURE_NAMES}
 _NAN_RESULT["oligomer_level"] = 0.0
 
 
+# ---------------------------------------------------------------------------
+# Energy backend: AIMNet2 (GPU) → MMFF94 (CPU) fallback
+# ---------------------------------------------------------------------------
+
+_AIMNET2_MODEL = None  # lazy-loaded singleton
+_BACKEND = None        # "aimnet2" or "mmff"
+
+
+def _get_backend() -> str:
+    """Detect available energy backend. AIMNet2 preferred."""
+    global _BACKEND, _AIMNET2_MODEL
+    if _BACKEND is not None:
+        return _BACKEND
+
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            raise RuntimeError("No CUDA GPU")
+
+        import aimnet2calc
+        _AIMNET2_MODEL = aimnet2calc.AIMNet2Calculator("aimnet2")
+        _BACKEND = "aimnet2"
+        print(f"[chain_physics] Using AIMNet2 backend (GPU: {torch.cuda.get_device_name(0)})")
+    except Exception as e:
+        _BACKEND = "mmff"
+        warnings.warn(
+            f"[chain_physics] AIMNet2 unavailable ({e}), falling back to MMFF94 (CPU). "
+            f"Install: pip install aimnet2calc"
+        )
+    return _BACKEND
+
+
+def _compute_energies_aimnet2(
+    mol: Chem.Mol, cids: list
+) -> Tuple[np.ndarray, list]:
+    """Compute conformer energies using AIMNet2 on GPU.
+
+    AIMNet2 supports batch computation — all conformers in one GPU call.
+    Returns energies in kcal/mol and list of valid conformer IDs.
+    """
+    import torch
+    from aimnet2calc import AIMNet2Calculator
+
+    global _AIMNET2_MODEL
+    if _AIMNET2_MODEL is None:
+        _AIMNET2_MODEL = AIMNet2Calculator("aimnet2")
+
+    calc = _AIMNET2_MODEL
+    energies = []
+    valid_cids = []
+
+    # AIMNet2 works with ASE atoms objects or coordinates + atomic numbers
+    for cid in cids:
+        try:
+            conf = mol.GetConformer(cid)
+            coords = np.array(conf.GetPositions())  # (N, 3) in Angstrom
+            atomic_nums = np.array([a.GetAtomicNum() for a in mol.GetAtoms()])
+
+            # AIMNet2 input: dict with 'coord' and 'numbers'
+            inp = {
+                "coord": torch.tensor(coords, dtype=torch.float32).unsqueeze(0),
+                "numbers": torch.tensor(atomic_nums, dtype=torch.long).unsqueeze(0),
+            }
+            result = calc(inp)
+            # Energy in Hartree → convert to kcal/mol
+            e_hartree = result["energy"].item()
+            energies.append(e_hartree * 627.509)  # 1 Hartree = 627.509 kcal/mol
+            valid_cids.append(cid)
+        except Exception:
+            continue
+
+    return np.array(energies) if energies else np.array([]), valid_cids
+
+
+def _compute_energies_mmff(
+    mol: Chem.Mol, cids: list
+) -> Tuple[np.ndarray, list]:
+    """Compute conformer energies using MMFF94 (CPU fallback).
+
+    Optimizes each conformer then computes energy.
+    Returns energies in kcal/mol and list of valid conformer IDs.
+    """
+    energies = []
+    valid_cids = []
+
+    for cid in cids:
+        try:
+            AllChem.MMFFOptimizeMolecule(mol, confId=cid, maxIters=200)
+            props = AllChem.MMFFGetMoleculeProperties(mol)
+            if props is not None:
+                ff = AllChem.MMFFGetMoleculeForceField(mol, props, confId=cid)
+                if ff is not None:
+                    energies.append(ff.CalcEnergy())
+                    valid_cids.append(cid)
+        except Exception:
+            continue
+
+    return np.array(energies) if energies else np.array([]), valid_cids
+
+
+def _compute_energies(
+    mol: Chem.Mol, cids: list
+) -> Tuple[np.ndarray, list]:
+    """Compute conformer energies using best available backend."""
+    backend = _get_backend()
+    if backend == "aimnet2":
+        energies, valid = _compute_energies_aimnet2(mol, cids)
+        if len(energies) >= 5:
+            return energies, valid
+        # AIMNet2 failed for this molecule → fallback to MMFF
+        return _compute_energies_mmff(mol, cids)
+    return _compute_energies_mmff(mol, cids)
+
+
+# ---------------------------------------------------------------------------
+# Core physics computation
+# ---------------------------------------------------------------------------
+
 def chain_physics_feature_names() -> List[str]:
     """Return chain physics feature names in fixed order."""
     return list(FEATURE_NAMES)
@@ -56,7 +173,6 @@ def _boltzmann_neff(energies: np.ndarray, T: float) -> float:
     """Compute Boltzmann-weighted effective conformer count at temperature T.
 
     N_eff = exp(S_conf) where S_conf = -Σ pᵢ ln(pᵢ)  (Shannon entropy)
-    pᵢ = exp(-ΔEᵢ/RT) / Z  (Boltzmann probability)
     """
     RT_kcal = 1.987e-3 * T  # gas constant in kcal/(mol·K)
     dE = energies - energies.min()
@@ -74,7 +190,9 @@ def compute_3mer_physics(
     """Compute chain-segment physics from 3-mer conformational sampling.
 
     Single function that computes BOTH N_eff and Cn_proxy from one
-    round of oligomer building + conformer embedding + MMFF optimization.
+    round of oligomer building + conformer embedding + energy computation.
+
+    Energy backend: AIMNet2 (GPU) if available, MMFF94 (CPU) fallback.
 
     Args:
         smiles: Polymer repeat unit SMILES (with * attachment points).
@@ -94,8 +212,6 @@ def compute_3mer_physics(
         return dict(_NAN_RESULT)
 
     # --- Stage 2: Find chain ends BEFORE AddHs ---
-    # Use graph diameter (topologically most distant heavy atom pair)
-    # Must be done before AddHs because AddHs changes degree of terminal atoms
     heavy_idx = [a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() > 1]
     if len(heavy_idx) < 4:
         return dict(_NAN_RESULT)
@@ -113,7 +229,7 @@ def compute_3mer_physics(
     if n_backbone_bonds < 3:
         return dict(_NAN_RESULT)
 
-    # --- Stage 3: Generate 3D conformers ---
+    # --- Stage 3: Generate 3D conformers (CPU, ETKDGv3) ---
     mol = Chem.AddHs(mol)
     params = AllChem.ETKDGv3()
     params.useRandomCoords = True
@@ -123,25 +239,11 @@ def compute_3mer_physics(
     if len(cids) < 5:
         return dict(_NAN_RESULT)
 
-    # --- Stage 4: MMFF optimize and collect energies ---
-    energies = []
-    valid_cids = []
-    for cid in cids:
-        try:
-            AllChem.MMFFOptimizeMolecule(mol, confId=cid, maxIters=200)
-            props = AllChem.MMFFGetMoleculeProperties(mol)
-            if props is not None:
-                ff = AllChem.MMFFGetMoleculeForceField(mol, props, confId=cid)
-                if ff is not None:
-                    energies.append(ff.CalcEnergy())
-                    valid_cids.append(cid)
-        except Exception:
-            continue
+    # --- Stage 4: Compute energies (GPU AIMNet2 or CPU MMFF) ---
+    energies, valid_cids = _compute_energies(mol, list(cids))
 
     if len(energies) < 5:
         return dict(_NAN_RESULT)
-
-    energies = np.array(energies)
 
     # --- Stage 5: Compute N_eff at two temperatures ---
     neff_300 = _boltzmann_neff(energies, 300.0)
@@ -150,7 +252,6 @@ def compute_3mer_physics(
     conf_strain = float(np.mean(energies) - energies.min())
 
     # --- Stage 6: Compute Cn_proxy and curl metrics ---
-    # Read actual bond lengths from first conformer along backbone path
     conf0 = mol.GetConformer(valid_cids[0])
     path = rdmolops.GetShortestPath(mol, first_atom, last_atom)
 
@@ -168,7 +269,6 @@ def compute_3mer_physics(
     n_path_bonds = len(bond_lengths_sq)
     contour_length = sum(np.sqrt(bl) for bl in bond_lengths_sq)
 
-    # End-to-end distance² for all conformers
     r_ee_sq = []
     for cid in valid_cids:
         conf = mol.GetConformer(cid)
@@ -180,13 +280,9 @@ def compute_3mer_physics(
     r_ee_sq = np.array(r_ee_sq)
     r_ee_mean = np.sqrt(np.mean(r_ee_sq))
 
-    # Cn = <R²> / (n × <l²>)
     cn_proxy = float(np.mean(r_ee_sq) / (n_path_bonds * mean_l_sq))
-
-    # curl_ratio: actual distance / max stretch (0=coiled, 1=extended)
     curl_ratio = float(r_ee_mean / max(contour_length, 1e-6))
 
-    # curl_variance: conformational plasticity
     r_ee_vals = np.sqrt(r_ee_sq)
     curl_var = float(np.std(r_ee_vals) / max(r_ee_mean, 1e-6))
 
