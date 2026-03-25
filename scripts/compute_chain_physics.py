@@ -67,16 +67,17 @@ def main():
     t0 = time.time()
 
     if args.n_jobs == 1:
-        # Sequential (for debugging)
+        import sys
         results = []
+        print("  Starting...", flush=True)
         for i, task in enumerate(tasks):
             results.append(compute_one(task))
-            if (i + 1) % 50 == 0:
+            if (i + 1) % 10 == 0 or (i + 1) == 1:
                 elapsed = time.time() - t0
                 rate = (i + 1) / elapsed
                 eta = (n - i - 1) / rate
                 print(f"  {i+1}/{n} ({100*(i+1)/n:.0f}%) "
-                      f"{rate:.1f} mol/s, ETA {eta/60:.0f}min")
+                      f"{rate:.2f} mol/s, ETA {eta/60:.0f}min", flush=True)
     else:
         from joblib import Parallel, delayed
         n_jobs = args.n_jobs if args.n_jobs > 0 else os.cpu_count()
