@@ -27,7 +27,9 @@ from src.features.rdkit_descriptors import (
 )
 from src.features.hbond_features import (
     compute_hbond_features,
+    compute_hbond_slim,
     hbond_feature_names,
+    hbond_slim_feature_names,
 )
 from src.features.physical_proxy import (
     ppf_feature_names,
@@ -36,6 +38,10 @@ from src.features.physical_proxy import (
 from src.features.virtual_polymerization import (
     vpd_feature_names,
     vpd_vector,
+)
+from src.features.gc_tg import (
+    gc_tg_feature_names,
+    gc_tg_vector,
 )
 from src.bigsmiles.fingerprint import (
     morgan_fingerprint,
@@ -62,6 +68,9 @@ LAYER_COMPONENTS = {
     "M2M-P": ["afsordeh", "rdkit_2d", "hbond", "ppf"],              # 44-dim (PPF only)
     "M2M-V": ["afsordeh", "rdkit_2d", "hbond", "vpd"],              # 46-dim (VPD only)
     "M2M-PV": ["ppf", "vpd"],                                        # 22-dim (pure physics)
+    # PHY layers — Physics-enhanced (corrected PPF + GC_Tg + HBond slim)
+    "PHY": ["afsordeh", "rdkit_2d", "hbond_slim", "ppf", "vpd", "gc_tg"],  # 48-dim
+    "PHY-noVPD": ["afsordeh", "rdkit_2d", "hbond_slim", "ppf", "gc_tg"],   # 36-dim
 }
 
 
@@ -93,6 +102,12 @@ def get_feature_names(
 
     if "hbond" in components:
         names.extend(hbond_feature_names())
+
+    if "hbond_slim" in components:
+        names.extend(hbond_slim_feature_names())
+
+    if "gc_tg" in components:
+        names.extend(gc_tg_feature_names())
 
     if "morgan" in components:
         names.extend(f"morgan_{i}" for i in range(morgan_bits))
@@ -144,6 +159,13 @@ def compute_features(
 
     if "hbond" in components:
         features.extend(float(x) for x in compute_hbond_features(smiles))
+
+    if "hbond_slim" in components:
+        slim = compute_hbond_slim(smiles)
+        features.extend(slim[k] for k in hbond_slim_feature_names())
+
+    if "gc_tg" in components:
+        features.extend(gc_tg_vector(smiles))
 
     if "morgan" in components:
         fp = morgan_fingerprint(smiles, radius=2, n_bits=morgan_bits)

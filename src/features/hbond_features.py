@@ -1,17 +1,20 @@
 """
-H-bond SMARTS Features for Tg Prediction — 15 Dimensions
-氢键 SMARTS 特征 — 15 维
+H-bond SMARTS Features for Tg Prediction
+氢键 SMARTS 特征
 
-Three-layer structure:
-    L1 基础计数 (10 dim): SMARTS pattern match counts
-    L2 密度 (4 dim): normalized density indicators
-    L3 能量 (1 dim): CED-weighted sum (intermolecular force estimate)
+Two versions:
+    Full (15-dim): L1 counts + L2 density + L3 CED (legacy, for compatibility)
+    Slim (5-dim):  ced_weighted_sum, total_hbond_density,
+                   hbond_network_potential, polar_fraction, interaction_types
+                   (SHAP-guided: removes 10 low-value SMARTS counts)
 
 Source: 氢键与Tg关系调研-核酸数据库构建策略.md
 
 Public API:
-    compute_hbond_features(smiles) -> np.ndarray  (15-dim vector)
-    hbond_feature_names() -> list[str]
+    compute_hbond_features(smiles) -> np.ndarray  (15-dim, legacy)
+    compute_hbond_slim(smiles) -> dict             (5-dim, recommended)
+    hbond_feature_names() -> list[str]             (15-dim names)
+    hbond_slim_feature_names() -> list[str]        (5-dim names)
     count_hbond_groups(smiles) -> dict
     hbond_density(smiles) -> dict
     ced_weighted_sum(smiles) -> float
@@ -206,3 +209,74 @@ def compute_hbond_features(smiles: str) -> np.ndarray:
     features.append(float(ced))
 
     return np.array(features, dtype=float)
+
+
+# ---------------------------------------------------------------------------
+# Slim version: 5-dim (SHAP-guided selection, recommended for new models)
+# ---------------------------------------------------------------------------
+
+_HBOND_SLIM_NAMES = [
+    "ced_weighted_sum",        # SHAP #7 (6.89): CED-weighted H-bond strength
+    "total_hbond_density",     # (donors+acceptors)/heavy: overall H-bond capacity
+    "hbond_network_potential",  # donors*acceptors/heavy²: network formation ability
+    "polar_fraction",           # TPSA/(TPSA+nonpolar): polar surface ratio
+    "interaction_types",        # count of distinct H-bond group types present
+]
+
+
+def hbond_slim_feature_names() -> List[str]:
+    """Return ordered list of 5 slim H-bond feature names."""
+    return list(_HBOND_SLIM_NAMES)
+
+
+def compute_hbond_slim(smiles: str) -> Dict[str, float]:
+    """Compute slim 5-dim H-bond features (replaces 15-dim for new models).
+
+    Physical rationale for each feature:
+      ced_weighted_sum:        intermolecular force strength (→ higher Tg)
+      total_hbond_density:     H-bond sites per atom (→ more interchain links)
+      hbond_network_potential: donors AND acceptors needed for a network;
+                               one without the other cannot form H-bond networks
+      polar_fraction:          polar surface → stronger intermolecular attraction
+      interaction_types:       diversity of H-bond motifs (amide+OH > pure amide)
+
+    Args:
+        smiles: Polymer repeat unit SMILES.
+
+    Returns:
+        Dict with 5 float values.
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return {name: 0.0 for name in _HBOND_SLIM_NAMES}
+
+    heavy = Descriptors.HeavyAtomCount(mol) or 1
+
+    # Feature 1: ced_weighted_sum (reuse existing function)
+    ced = ced_weighted_sum(smiles)
+
+    # Feature 2: total_hbond_density (reuse from hbond_density)
+    counts = count_hbond_groups(smiles)
+    total_hb = sum(counts.values()) / heavy
+
+    # Feature 3: hbond_network_potential
+    n_donors = Descriptors.NumHDonors(mol)
+    n_acceptors = Descriptors.NumHAcceptors(mol)
+    network = (n_donors * n_acceptors) / (heavy * heavy)
+
+    # Feature 4: polar_fraction = TPSA / (TPSA + non-polar SA)
+    tpsa = Descriptors.TPSA(mol)
+    labute_asa = Descriptors.LabuteASA(mol)
+    total_sa = max(labute_asa, 1.0)
+    polar_frac = tpsa / (tpsa + total_sa)
+
+    # Feature 5: interaction_types = number of distinct H-bond group types
+    n_types = sum(1 for c in counts.values() if c > 0)
+
+    return {
+        "ced_weighted_sum": ced,
+        "total_hbond_density": total_hb,
+        "hbond_network_potential": network,
+        "polar_fraction": polar_frac,
+        "interaction_types": float(n_types),
+    }

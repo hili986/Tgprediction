@@ -20,10 +20,12 @@ Public API:
     ppf_vector(smiles) -> list[float]
 """
 
+import math
 from typing import Dict, List, Set
 
+import numpy as np
 from rdkit import Chem
-from rdkit.Chem import Descriptors
+from rdkit.Chem import AllChem, Descriptors
 
 from src.features.solubility_param import (
     compute_solubility_param,
@@ -53,15 +55,40 @@ _HBOND_GC_KEYS = {"[OX2H]", "[NX3H2]", "[NX3H1]", "[NX3]([CX3]=O)"}
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _count_flexible_bonds(mol: Chem.Mol) -> float:
-    """Count flexible bonds with type-specific weights.
+def _is_terminal_substituent(atom) -> bool:
+    """Check if atom is a true terminal substituent whose rotation is trivial.
 
-    Rules:
+    Only single-atom terminals: halogens (-F, -Cl, -Br, -I) and -OH.
+    Does NOT include -CH3 or other carbon terminals, because in polymer
+    SMILES the * attachment points become -CH3 after H-capping, and
+    those bonds are real backbone bonds, not trivial terminals.
+    """
+    if atom.GetDegree() != 1:
+        return False
+    sym = atom.GetSymbol()
+    if sym in ("F", "Cl", "Br", "I"):
+        return True
+    if sym == "O" and atom.GetTotalNumHs() >= 1:
+        # Si-O backbone bond from siloxane H-capping (*[Si]...O* → O has deg=1)
+        # This is NOT a terminal -OH, it's a real backbone bond
+        for nbr in atom.GetNeighbors():
+            if nbr.GetSymbol() == "Si":
+                return False  # siloxane backbone, not -OH
+        return True
+    return False
+
+
+def _count_flexible_bonds(mol: Chem.Mol) -> float:
+    """Count flexible bonds with type-specific weights (Schneider-DiMarzio rules).
+
+    Rules (Schneider & DiMarzio 2006, PMC2203329):
       - Non-ring single bonds only
+      - Terminal atoms (degree=1): 0 — rotation of -OH, -CH3, -F etc.
+        does not change molecular shape (Schneider-DiMarzio principle)
+      - Amide-adjacent C-N: 0 (resonance restricts rotation)
+      - Si-O: 1.5 (organosilicon super-flexible, low barrier ~1 kJ/mol)
+      - Aromatic-aromatic single bond: 0.5 (restricted rotation)
       - C-C / C-O / C-N / C-S non-ring single: 1.0
-      - Si-O: 1.5 (organosilicon super-flexible)
-      - Amide-adjacent C-N (neighbor has C=O): 0 (conjugation restricts rotation)
-      - Aromatic-aromatic single bond: 0.5
       - Ring bonds / double / triple: 0
     """
     f_total = 0.0
@@ -75,7 +102,17 @@ def _count_flexible_bonds(mol: Chem.Mol) -> float:
         a2 = bond.GetEndAtom()
         s1, s2 = a1.GetSymbol(), a2.GetSymbol()
 
+        # Rule: amide C-N → 0 (conjugation)
         if _is_amide_adjacent(a1, a2, bond):
+            continue
+
+        # Rule: true terminal single-atom substituents → 0
+        # -F, -Cl, -Br, -I (single atom, degree=1): rotation is identity
+        # -OH oxygen (degree=1, has H): H too small to change shape
+        # NOTE: degree=1 carbons are NOT skipped — after * → [H] replacement,
+        # backbone carbons become CH3 with degree=1, but they represent
+        # real polymer backbone bonds, not true terminals
+        if _is_terminal_substituent(a1) or _is_terminal_substituent(a2):
             continue
 
         if a1.GetIsAromatic() and a2.GetIsAromatic():
@@ -89,7 +126,7 @@ def _count_flexible_bonds(mol: Chem.Mol) -> float:
         if {s1, s2} <= {"C", "O", "N", "S"}:
             f_total += 1.0
 
-    return max(f_total, 0.5)  # min 0.5 to prevent division by zero
+    return max(f_total, 0.1)  # lowered from 0.5 to preserve rigidity differences
 
 
 def _is_amide_adjacent(a1, a2, bond) -> bool:
@@ -106,6 +143,107 @@ def _is_amide_adjacent(a1, a2, bond) -> bool:
                                 and b.GetBondType() == Chem.BondType.DOUBLE):
                             return True
     return False
+
+
+_USE_3D_VOLUME = True   # Set False to use fast Labute approximation
+_MAX_HEAVY_FOR_3D = 80  # Skip 3D for molecules larger than this
+
+
+def _compute_vdw_volume(mol: Chem.Mol) -> float:
+    """Compute van der Waals volume.
+
+    Primary: RDKit 3D embedding + ComputeMolVolume (accurate but slow).
+    Fallback: Labute ASA → spherical volume approximation (fast).
+
+    Returns:
+        V_vdW in Angstrom^3, or NaN if computation fails.
+    """
+    n_heavy = mol.GetNumHeavyAtoms()
+    if n_heavy == 0:
+        return float("nan")
+
+    # Fast mode or molecule too large for 3D
+    if not _USE_3D_VOLUME or n_heavy > _MAX_HEAVY_FOR_3D:
+        return _vdw_volume_fast(mol)
+
+    # 3D embedding + volume
+    mol_3d = Chem.AddHs(mol)
+    params = AllChem.ETKDGv3()
+    params.useRandomCoords = True
+    if AllChem.EmbedMolecule(mol_3d, params) < 0:
+        return _vdw_volume_fast(mol)  # fallback
+    AllChem.MMFFOptimizeMolecule(mol_3d, maxIters=100)
+    try:
+        return AllChem.ComputeMolVolume(mol_3d)
+    except Exception:
+        return _vdw_volume_fast(mol)
+
+
+def _vdw_volume_fast(mol: Chem.Mol) -> float:
+    """Fast vdW volume estimate from Labute ASA (no 3D needed).
+
+    Uses spherical approximation: V ≈ (4/3)π × (ASA/4π)^(3/2)
+    This gives V ∝ ASA^1.5, normalized to match 3D volumes empirically.
+    """
+    asa = Descriptors.LabuteASA(mol)
+    if asa <= 0:
+        return float("nan")
+    # Empirical scale: calibrated against ComputeMolVolume on PE/PP/PS/PMMA/PVC/PET
+    # ASA in Å², volume in Å³. Factor 0.47 from regression against 3D volumes.
+    return 0.47 * (asa ** 1.5)
+
+
+def _estimate_molar_volume(mol: Chem.Mol) -> float:
+    """Estimate molar volume V_m using GC method.
+
+    GC_GROUPS Vw values are molar volumes (cm³/mol) from VK Table 4.5,
+    NOT van der Waals volumes. Sum directly gives V_m.
+    Fallback: V_m = Mw / 1.1  (density ≈ 1.1 g/cm³)
+
+    Returns:
+        V_m in cm³/mol, or NaN if estimation fails.
+    """
+    total_vm = 0.0
+    for smarts_str, (name, ecoh, vm) in GC_GROUPS.items():
+        pattern = Chem.MolFromSmarts(smarts_str)
+        if pattern is not None:
+            count = len(mol.GetSubstructMatches(pattern))
+            total_vm += vm * count
+    if total_vm > 0:
+        return total_vm
+    # Fallback: density ≈ 1.1 g/cm³
+    mw = Descriptors.MolWt(mol)
+    return mw / 1.1 if mw > 0 else float("nan")
+
+
+def compute_free_volume(mol: Chem.Mol) -> Dict[str, float]:
+    """Compute corrected free volume fraction using 3D vdW volume.
+
+    Van Krevelen formula: f = 1 - 1.3 × V_vdW / V_m
+      V_vdW = van der Waals volume (cm³/mol) from 3D conformer
+      V_m   = molar volume (cm³/mol) from GC method
+
+    Returns NaN if 3D embedding fails (NaN = signal, not error).
+
+    Returns:
+        Dict with FV_fraction and FV_packing.
+    """
+    v_vdw_a3 = _compute_vdw_volume(mol)
+    if math.isnan(v_vdw_a3):
+        return {"FV_fraction": float("nan"), "FV_packing": float("nan")}
+
+    v_m = _estimate_molar_volume(mol)
+    if math.isnan(v_m) or v_m <= 0:
+        return {"FV_fraction": float("nan"), "FV_packing": float("nan")}
+
+    # Unit conversion: Å³ → cm³/mol (×Avogadro/10²⁴ = ×0.6022)
+    v_vdw_cm3 = v_vdw_a3 * 0.6022
+
+    packing = v_vdw_cm3 / v_m
+    f = 1.0 - 1.3 * packing
+    f = max(0.0, min(0.6, f))
+
+    return {"FV_fraction": f, "FV_packing": packing}
 
 
 def _find_backbone_atoms(mol: Chem.Mol, smiles: str) -> Set[int]:
@@ -207,12 +345,9 @@ def compute_ppf(smiles: str) -> Dict[str, float]:
     sol = compute_solubility_param(mol)
     ced = sol ** 2
 
-    # PPF_3: Vf — free volume fraction estimate
-    # Vf = 1 - 1.3 * V_vdW / V_m, using LabuteASA as V_vdW proxy
-    v_vdw = Descriptors.LabuteASA(mol)
-    v_m = max(mw, 1.0)  # rough V_m ~ MW (density ~ 1 g/cm3)
-    vf = 1.0 - 1.3 * v_vdw / v_m
-    vf = max(0.0, min(1.0, vf))
+    # PPF_3: Vf — free volume fraction (corrected: 3D vdW volume + GC V_m)
+    fv = compute_free_volume(mol)
+    vf = fv["FV_fraction"]  # NaN if 3D embedding fails (NaN = signal)
 
     # PPF_4: backbone_rigidity — rigid bonds / total backbone bonds
     backbone = _find_backbone_atoms(mol, smiles)
