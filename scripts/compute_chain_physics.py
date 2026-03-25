@@ -94,8 +94,9 @@ def main():
         print("  All molecules already computed!", flush=True)
     else:
         # Build tasks for remaining molecules
-        all_smiles = [str(row["smiles"]) for _, row in df.iterrows()]
+        all_smiles = df["smiles"].astype(str).tolist()
         tasks = [(i, all_smiles[i], args.n_confs) for i in remaining_indices]
+        print(f"  Tasks built, starting computation...", flush=True)
 
         t0 = time.time()
 
