@@ -3,8 +3,8 @@ Chain Segment Physics Features — N_eff + Cn_proxy from 3-mer conformational sa
 链段物理特征 — 3-mer 构象采样得到 Boltzmann N_eff + 链刚性代理
 
 Energy backend:
-  Default: AIMNet2 (GPU, pip install aimnet2calc)
-  Fallback: MMFF94 (CPU, RDKit built-in)
+  Default: MMFF94 (CPU, RDKit built-in)
+  Opt-in: AIMNet2 (GPU, pip install aimnet2calc) — set _BACKEND = None to auto-detect
 
 8 features from a single 3-mer + 50 conformers computation:
   Neff_300K:      Boltzmann effective conformer count at 300K (Gibbs-DiMarzio)
@@ -47,15 +47,15 @@ _NAN_RESULT["oligomer_level"] = 0.0
 
 
 # ---------------------------------------------------------------------------
-# Energy backend: AIMNet2 (GPU) → MMFF94 (CPU) fallback
+# Energy backend: MMFF94 (CPU) default, AIMNet2 (GPU) opt-in
 # ---------------------------------------------------------------------------
 
 _AIMNET2_MODEL = None  # lazy-loaded singleton
-_BACKEND = None        # "aimnet2" or "mmff"
+_BACKEND = "mmff"      # default CPU; set to None to auto-detect AIMNet2
 
 
 def _get_backend() -> str:
-    """Detect available energy backend. AIMNet2 preferred."""
+    """Detect available energy backend. MMFF94 default."""
     global _BACKEND, _AIMNET2_MODEL
     if _BACKEND is not None:
         return _BACKEND
@@ -192,7 +192,7 @@ def compute_3mer_physics(
     Single function that computes BOTH N_eff and Cn_proxy from one
     round of oligomer building + conformer embedding + energy computation.
 
-    Energy backend: AIMNet2 (GPU) if available, MMFF94 (CPU) fallback.
+    Energy backend: MMFF94 (CPU) by default.
 
     Args:
         smiles: Polymer repeat unit SMILES (with * attachment points).
@@ -239,7 +239,7 @@ def compute_3mer_physics(
     if len(cids) < 5:
         return dict(_NAN_RESULT)
 
-    # --- Stage 4: Compute energies (GPU AIMNet2 or CPU MMFF) ---
+    # --- Stage 4: Compute energies (MMFF94 CPU default) ---
     energies, valid_cids = _compute_energies(mol, list(cids))
 
     if len(energies) < 5:
