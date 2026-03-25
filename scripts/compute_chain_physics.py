@@ -30,10 +30,7 @@ from src.features.chain_physics import compute_3mer_physics, chain_physics_featu
 DATA_PATH = PROJECT_ROOT / "data" / "unified_tg.parquet"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "chain_physics_features.parquet"
 CHECKPOINT_PATH = PROJECT_ROOT / "data" / "chain_physics_checkpoint.json"
-CHECKPOINT_INTERVAL = 20   # save every N molecules
-MOLECULE_TIMEOUT = 120     # seconds per molecule, NaN if exceeded
-
-_NAN = None  # initialized in main
+CHECKPOINT_INTERVAL = 50   # save every N molecules
 
 
 def _make_nan():
@@ -109,7 +106,6 @@ def main():
         t0 = time.time()
 
         n_jobs = args.n_jobs if args.n_jobs > 1 else 1
-        nan_result = _make_nan()
 
         if n_jobs == 1:
             for i, task in enumerate(tasks):
@@ -125,37 +121,24 @@ def main():
                           f"{rate:.2f} mol/s, ETA {eta/60:.0f}min",
                           flush=True)
         else:
-            print(f"  Using {n_jobs} cores, timeout={MOLECULE_TIMEOUT}s/mol",
-                  flush=True)
-            pool = Pool(n_jobs, maxtasksperchild=50)
-            timeout_count = 0
+            print(f"  Using {n_jobs} cores", flush=True)
+            pool = Pool(n_jobs)
+            count = 0
 
-            for batch_start in range(0, len(tasks), CHECKPOINT_INTERVAL):
-                batch = tasks[batch_start:batch_start + CHECKPOINT_INTERVAL]
-                async_results = [
-                    (task[0], pool.apply_async(compute_one, (task,)))
-                    for task in batch
-                ]
+            for idx, result in pool.imap_unordered(compute_one, tasks):
+                completed[idx] = result
+                count += 1
+                if count % CHECKPOINT_INTERVAL == 0 or count == len(tasks):
+                    save_checkpoint(completed)
+                    done = len(completed)
+                    elapsed = time.time() - t0
+                    rate = count / max(elapsed, 1)
+                    eta = (len(tasks) - count) / max(rate, 0.001)
+                    print(f"  {done}/{n} ({100*done/n:.1f}%) "
+                          f"{rate:.2f} mol/s, ETA {eta/60:.0f}min",
+                          flush=True)
 
-                for idx, ar in async_results:
-                    try:
-                        _, result = ar.get(timeout=MOLECULE_TIMEOUT)
-                        completed[idx] = result
-                    except Exception:
-                        completed[idx] = dict(nan_result)
-                        timeout_count += 1
-
-                save_checkpoint(completed)
-                done = len(completed)
-                elapsed = time.time() - t0
-                rate = (batch_start + len(batch)) / max(elapsed, 1)
-                eta = (len(tasks) - batch_start - len(batch)) / max(rate, 0.001)
-                print(f"  {done}/{n} ({100*done/n:.1f}%) "
-                      f"{rate:.2f} mol/s, ETA {eta/60:.0f}min "
-                      f"[timeout={timeout_count}]",
-                      flush=True)
-
-            pool.terminate()
+            pool.close()
             pool.join()
 
         elapsed = time.time() - t0
