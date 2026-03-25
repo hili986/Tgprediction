@@ -43,8 +43,8 @@ def compute_one(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-confs", type=int, default=50)
-    parser.add_argument("--n-jobs", type=int, default=-1,
-                        help="Number of parallel jobs (-1 = all cores)")
+    parser.add_argument("--n-jobs", type=int, default=1,
+                        help="Number of parallel jobs (1=sequential for GPU, -1=all cores for CPU)")
     parser.add_argument("--test", type=int, default=0,
                         help="Test on N samples only (0 = full dataset)")
     args = parser.parse_args()
