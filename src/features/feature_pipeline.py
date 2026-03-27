@@ -43,6 +43,10 @@ from src.features.gc_tg import (
     gc_tg_feature_names,
     gc_tg_vector,
 )
+from src.features.interchain_features import (
+    interchain_feature_names,
+    interchain_vector,
+)
 from src.bigsmiles.fingerprint import (
     morgan_fingerprint,
     fragment_vector,
@@ -71,6 +75,8 @@ LAYER_COMPONENTS = {
     # PHY layers — Physics-enhanced (corrected PPF + GC_Tg + HBond slim)
     "PHY": ["afsordeh", "rdkit_2d", "hbond_slim", "ppf", "vpd", "gc_tg"],  # 48-dim
     "PHY-noVPD": ["afsordeh", "rdkit_2d", "hbond_slim", "ppf", "gc_tg"],   # 36-dim
+    # PHY-B2 layers — PHY + interchain interaction features (Phase B2)
+    "PHY-B2": ["afsordeh", "rdkit_2d", "hbond_slim", "ppf", "vpd", "gc_tg", "interchain"],  # 56-dim
 }
 
 
@@ -123,6 +129,9 @@ def get_feature_names(
 
     if "vpd" in components:
         names.extend(f"VPD_{n}" for n in vpd_feature_names())
+
+    if "interchain" in components:
+        names.extend(f"IC_{n}" for n in interchain_feature_names())
 
     return names
 
@@ -182,6 +191,9 @@ def compute_features(
 
     if "vpd" in components:
         features.extend(vpd_vector(smiles))
+
+    if "interchain" in components:
+        features.extend(interchain_vector(smiles))
 
     return np.array(features, dtype=float)
 
