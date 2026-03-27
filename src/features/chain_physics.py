@@ -21,6 +21,7 @@ Public API:
     chain_physics_feature_names() -> list[str]
 """
 
+import threading
 import warnings
 from typing import Dict, List, Optional, Tuple
 
@@ -161,6 +162,44 @@ def _compute_energies(
 
 
 # ---------------------------------------------------------------------------
+# Conformer embedding with timeout
+# ---------------------------------------------------------------------------
+
+def _embed_with_timeout(
+    mol: Chem.Mol, n_confs: int, params, timeout: int = 60
+) -> Optional[list]:
+    """Run EmbedMultipleConfs with timeout (seconds).
+
+    ETKDGv3 can hang indefinitely when UFF cannot type certain atoms
+    (e.g. Si with unusual charge states). This wraps the call in a
+    daemon thread so we can fall back to simpler embedding.
+
+    Returns list of conformer IDs, or None on timeout.
+    """
+    result: list = []
+    error: list = []
+
+    def _run():
+        try:
+            cids = AllChem.EmbedMultipleConfs(
+                mol, numConfs=n_confs, params=params
+            )
+            result.extend(list(cids))
+        except Exception as e:
+            error.append(e)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+
+    if thread.is_alive():
+        return None  # timed out
+    if error:
+        return None
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Core physics computation
 # ---------------------------------------------------------------------------
 
@@ -229,12 +268,25 @@ def compute_3mer_physics(
     if n_backbone_bonds < 3:
         return dict(_NAN_RESULT)
 
-    # --- Stage 3: Generate 3D conformers (CPU, ETKDGv3) ---
+    # --- Stage 3: Generate 3D conformers (CPU, ETKDGv3 with fallback) ---
     mol = Chem.AddHs(mol)
+
+    # Try ETKDGv3 first (best quality), 60s timeout to catch UFF hangs
     params = AllChem.ETKDGv3()
     params.useRandomCoords = True
     params.randomSeed = 42
-    cids = AllChem.EmbedMultipleConfs(mol, numConfs=n_confs, params=params)
+    cids = _embed_with_timeout(mol, n_confs, params, timeout=60)
+
+    if cids is None or len(cids) < 5:
+        # ETKDGv3 timed out or failed -> basic DG fallback (no UFF dependency)
+        mol = Chem.AddHs(Chem.MolFromSmiles(oligomer_smi))
+        params_fb = AllChem.EmbedParameters()
+        params_fb.useRandomCoords = True
+        params_fb.randomSeed = 42
+        params_fb.maxIterations = 500
+        cids = list(AllChem.EmbedMultipleConfs(
+            mol, numConfs=n_confs, params=params_fb
+        ))
 
     if len(cids) < 5:
         return dict(_NAN_RESULT)
