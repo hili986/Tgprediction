@@ -168,6 +168,11 @@ def main():
                 rho, p = spearmanr(vals[col], vals["tg_k"])
                 print(f"  Spearman({col}, Tg) = {rho:.4f} (p={p:.2e})", flush=True)
 
+    # Drop NaN rows (failed molecules)
+    before = len(feat_df)
+    feat_df = valid.reset_index(drop=True)
+    print(f"  Dropped {before - len(feat_df)} NaN rows", flush=True)
+
     # Save final output
     feat_df.to_parquet(str(OUTPUT_PATH), index=False)
     print(f"\nSaved to {OUTPUT_PATH}", flush=True)

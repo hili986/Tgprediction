@@ -284,9 +284,9 @@ def compute_3mer_physics(
         params_fb.useRandomCoords = True
         params_fb.randomSeed = 42
         params_fb.maxIterations = 500
-        cids = list(AllChem.EmbedMultipleConfs(
-            mol, numConfs=n_confs, params=params_fb
-        ))
+        cids = _embed_with_timeout(mol, n_confs, params_fb, timeout=60)
+        if cids is None:
+            cids = []
 
     if len(cids) < 5:
         return dict(_NAN_RESULT)
