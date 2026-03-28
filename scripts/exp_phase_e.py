@@ -248,6 +248,12 @@ def expert_committee_cv(
         # Train meta-learner on OOF predictions + meta features
         meta_idx = expert_idx["_meta"]
         X_meta_train = np.hstack([oof_preds, X_train[:, meta_idx]])
+        # Fill NaN in meta features (OOF predictions may have NaN from failed experts)
+        nan_mask = np.isnan(X_meta_train)
+        if nan_mask.any():
+            col_medians = np.nanmedian(X_meta_train, axis=0)
+            for c in range(X_meta_train.shape[1]):
+                X_meta_train[nan_mask[:, c], c] = col_medians[c]
         meta_learner = ElasticNet(alpha=0.1, l1_ratio=0.5, random_state=42)
         meta_learner.fit(X_meta_train, y_train)
 
@@ -267,6 +273,10 @@ def expert_committee_cv(
 
         # Meta-learner predicts
         X_meta_test = np.hstack([test_preds, X_test[:, meta_idx]])
+        nan_mask_test = np.isnan(X_meta_test)
+        if nan_mask_test.any():
+            for c in range(X_meta_test.shape[1]):
+                X_meta_test[nan_mask_test[:, c], c] = col_medians[c]
         y_pred = meta_learner.predict(X_meta_test)
 
         # Metrics
