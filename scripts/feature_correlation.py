@@ -67,9 +67,10 @@ def quick_chain_physics():
     merged = df_tg.merge(df_cp, on="smiles", how="inner")
     print(f"  Matched: {len(merged)} / {len(df_tg)} samples")
 
-    cp_cols = [c for c in df_cp.columns if c != "smiles"]
+    exclude = {"smiles", "tg_k", "tg_k_x", "tg_k_y"}
+    cp_cols = [c for c in df_cp.columns if c not in exclude]
     X = merged[cp_cols].values
-    y = merged["tg_k"].values
+    y = merged["tg_k_x"].values if "tg_k_x" in merged.columns else merged["tg_k"].values
     names = [f"CP_{c}" for c in cp_cols]
 
     result = correlate(X, y, names)
