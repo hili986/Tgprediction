@@ -13,9 +13,6 @@ import time
 import warnings
 from pathlib import Path
 
-# 国内镜像，避免 HuggingFace 连接超时
-os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
-
 import numpy as np
 import pandas as pd
 
@@ -46,7 +43,7 @@ def extract_and_cache(local_model: str = None):
 
     t0 = time.time()
     embeddings = extract_polybert_embeddings(
-        smiles_list, batch_size=64, device="cuda", local_path=local_model,
+        smiles_list, model_path=local_model, batch_size=64, device="cuda",
     )
     elapsed = time.time() - t0
     print(f"  Extraction done in {elapsed:.0f}s")
