@@ -47,6 +47,10 @@ from src.features.interchain_features import (
     interchain_feature_names,
     interchain_vector,
 )
+from src.features.chain_physics_cache import (
+    chain_physics_cache_names,
+    chain_physics_cache_vector,
+)
 from src.bigsmiles.fingerprint import (
     morgan_fingerprint,
     fragment_vector,
@@ -77,6 +81,8 @@ LAYER_COMPONENTS = {
     "PHY-noVPD": ["afsordeh", "rdkit_2d", "hbond_slim", "ppf", "gc_tg"],   # 36-dim
     # PHY-B2 layers — PHY + interchain interaction features (Phase B2)
     "PHY-B2": ["afsordeh", "rdkit_2d", "hbond_slim", "ppf", "vpd", "gc_tg", "interchain"],  # 56-dim
+    # PHY-C layers — PHY-B2 + chain physics from precomputed cache (Phase C)
+    "PHY-C": ["afsordeh", "rdkit_2d", "hbond_slim", "ppf", "vpd", "gc_tg", "interchain", "chain_physics"],  # 64-dim
 }
 
 
@@ -132,6 +138,9 @@ def get_feature_names(
 
     if "interchain" in components:
         names.extend(f"IC_{n}" for n in interchain_feature_names())
+
+    if "chain_physics" in components:
+        names.extend(f"CP_{n}" for n in chain_physics_cache_names())
 
     return names
 
@@ -194,6 +203,9 @@ def compute_features(
 
     if "interchain" in components:
         features.extend(interchain_vector(smiles))
+
+    if "chain_physics" in components:
+        features.extend(chain_physics_cache_vector(smiles))
 
     return np.array(features, dtype=float)
 
