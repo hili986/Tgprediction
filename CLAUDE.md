@@ -43,10 +43,11 @@ docs/
 - **多尺度重构进行中**:
   - Phase A: 数据诊断 ✅ (R²天花板 0.96-0.99)
   - Phase B: 特征工程 ✅ (PHY 48d: R²=0.8724, MAE=28.5K, +0.6% vs M2M-V)
-  - Phase C: 链段物理特征 ⏳ (Boltzmann N_eff, Cn_proxy)
+  - Phase B2: 链间相互作用 ✅ (PHY-B2 56d: R²=0.8836, MAE=27.0K, +0.84%)
+  - Phase C: 链段物理特征 ✅ (PHY-C-light 58d: R²=0.8831, MAE=26.9K)
   - Phase D: GNN + polyBERT 嵌入 ⏳
   - Phase E: 物理专家委员会 ⏳
-- **新特征集 PHY 48d**: Afsordeh(4) + RDKit(15) + HBond_slim(5) + GC_Tg(2) + PPF(10) + VPD(12)
+- **当前最优特征集 PHY-C-light 58d**: PHY-B2(56d) + chain_physics(3d: curl_ratio, Neff_ratio, conf_strain) - 冗余(1d: IC_hydrophilic_ratio)
 
 ## 当前执行方案 — 物理驱动多尺度重构
 > 详细方案: `docs/plans/方案待选-物理驱动多尺度算法重构.md` (v3)
@@ -63,7 +64,7 @@ docs/
 |------|------|---------|-------|
 | 原子/键 | RBP_Mf_corrected (修正柔性键) | Schneider-DiMarzio M/f | B |
 | 重复单元 | GC_Tg (基团贡献预测), HBond 5d (精简) | Van Krevelen | B |
-| 链段 | Neff (Boltzmann 构象数), FV (3D 自由体积), Cn (链刚性) | Gibbs-DiMarzio, 自由体积, Adam-Gibbs | C |
+| 链段 | curl_ratio, Neff_ratio, conf_strain (3-mer 构象采样) | Gibbs-DiMarzio, Adam-Gibbs | C |
 | 聚合物链 | GNN 预训练嵌入 64d (CV 内微调) | 周期性结构 | D |
 | 化学统计 | polyBERT PCA 64d | 语言模型 | D |
 
@@ -71,7 +72,7 @@ docs/
 ```
 Phase A (Day 1):  数据诊断 + 清洗
 Phase B (Day 2):  尺度 1-2 特征 (RBP, GC, HBond, FV)
-Phase C (Day 3-5): 尺度 3 链段物理 (N_eff, Cn, 5-mer) — CPU 并行
+Phase C (Day 3-5): 尺度 3 链段物理 (curl_ratio, Neff_ratio, conf_strain) — ✅ 完成
 Phase D (Day 6-8): 尺度 4-5 预训练嵌入 (GNN, polyBERT) — A800
 Phase E (Day 9-12): 物理专家委员会集成 + 消融
 ```
