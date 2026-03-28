@@ -7,10 +7,14 @@ Usage:
 """
 import argparse
 import json
+import os
 import sys
 import time
 import warnings
 from pathlib import Path
+
+# 国内镜像，避免 HuggingFace 连接超时
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 import numpy as np
 import pandas as pd
