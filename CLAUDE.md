@@ -37,14 +37,14 @@ docs/
 
 ## 当前状态 (2026-03-24)
 - **方案A**: 100% 完成 (Phase 1-5B, E1-E26)
-- **最优通用预测**: TabPFN v2, R²=0.8955, MAE=24K (零调参)
+- **最优通用预测**: TabPFN v2 + PHY-C-light 58d, R²=0.9050, MAE=22.4K (零调参)
 - **核酸迁移**: CatBoost, ATP 4.7K, ADP 0.4K
 - **学习计划**: 4 阶段完成 (Tg 物理→SHAP 解读→文献精读→原创假说)
 - **多尺度重构进行中**:
   - Phase A: 数据诊断 ✅ (R²天花板 0.96-0.99)
   - Phase B: 特征工程 ✅ (PHY 48d: R²=0.8724, MAE=28.5K, +0.6% vs M2M-V)
   - Phase B2: 链间相互作用 ✅ (PHY-B2 56d: R²=0.8836, MAE=27.0K, +0.84%)
-  - Phase C: 链段物理特征 ✅ (PHY-C-light 58d: R²=0.8831, MAE=26.9K)
+  - Phase C: 链段物理特征 ✅ (PHY-C-light 58d: TabPFN R²=0.9050, CatBoost R²=0.8831)
   - Phase D: GNN + polyBERT 嵌入 ⏳
   - Phase E: 物理专家委员会 ⏳
 - **当前最优特征集 PHY-C-light 58d**: PHY-B2(56d) + chain_physics(3d: curl_ratio, Neff_ratio, conf_strain) - 冗余(1d: IC_hydrophilic_ratio)
