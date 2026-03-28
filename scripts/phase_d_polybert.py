@@ -36,9 +36,13 @@ DROP = [
 ]
 
 
-def extract_and_cache():
+def extract_and_cache(local_model: str = None):
     """Extract polyBERT embeddings and save to parquet."""
-    from src.gnn.polybert_embedder import extract_polybert_embeddings
+    from src.gnn.polybert_embedder import extract_polybert_embeddings, _load_model
+
+    # Pre-load model with local path if specified
+    if local_model:
+        _load_model(device="cuda", local_path=local_model)
 
     df = pd.read_parquet(DATA_PATH)
     smiles_list = df["smiles"].tolist()
@@ -149,6 +153,8 @@ def run_tabpfn_test(embeddings_768: np.ndarray):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--extract-only", action="store_true")
+    parser.add_argument("--local-model", type=str, default=None,
+                        help="Path to locally downloaded polyBERT model directory")
     args = parser.parse_args()
 
     # Step 1: Extract or load
@@ -157,7 +163,7 @@ def main():
         embeddings, smiles = load_cached()
         print(f"  Loaded: {embeddings.shape}")
     else:
-        embeddings, smiles = extract_and_cache()
+        embeddings, smiles = extract_and_cache(local_model=args.local_model)
 
     if args.extract_only:
         print("Done (extract only).")
