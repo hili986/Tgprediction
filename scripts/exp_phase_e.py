@@ -168,8 +168,15 @@ def get_expert_indices(all_names: List[str]) -> Dict[str, List[int]]:
 
 def make_expert_model(expert_name: str, model_type: str):
     """Create model for a given expert."""
+    from sklearn.pipeline import Pipeline
+    from sklearn.impute import SimpleImputer
+
     if expert_name == "E3_physics_baseline":
-        return Ridge(alpha=1.0)
+        # Ridge can't handle NaN, wrap with imputer
+        return Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("ridge", Ridge(alpha=1.0)),
+        ])
 
     if model_type == "catboost":
         from catboost import CatBoostRegressor
