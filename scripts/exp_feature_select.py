@@ -36,47 +36,31 @@ RESULT_DIR = PROJECT_ROOT / "results" / "phase_c"
 #       IC_hydrophilic_ratio (=-IC_hydrophobic_ratio)
 #       L1_TPSA (≈VPD_TPSA_per_RU)
 
+# ── 激进筛选: 35d (max(|P|,|S|) >= 0.3, 去重) ──
 SELECTED_FEATURES = [
-    # === Tier 1: |r| > 0.5, 核心预测因子 ===
-    "PPF_flexible_bond_density",     # r=-0.744  链柔性密度
-    "VPD_RingCount_per_RU",          # r=+0.710  环结构
-    "L1_FractionCSP3",               # r=-0.700  sp3 碳比例
-    "L0_FlexibilityIndex",           # r=-0.663  柔性指数 (SHAP #1)
-    "L1_NumAromaticRings",           # r=+0.662  芳环数
-    "GC_Tg",                         # r=+0.647  基团贡献 Tg
-    "PPF_steric_volume",             # r=+0.586  位阻体积
-    "L0_SOL",                        # r=+0.583  溶解度参数
-    "PPF_CED_estimate",              # r=+0.576  内聚能密度
-    "PPF_backbone_rigidity",         # r=+0.569  骨架刚性
-    "PPF_side_chain_ratio",          # r=+0.568  侧链比
-    "IC_hydrophobic_ratio",          # r=+0.555  疏水比
-    "L1_BalabanJ",                   # r=-0.543  拓扑指数
-    "VPD_junction_flex_ratio",       # r=-0.532  聚合接头柔性
-    "VPD_HeavyAtom_per_RU",          # r=+0.507  重原子/RU
-    "IC_MolMR",                      # r=+0.479  摩尔折射率
-    "PPF_Vf_estimate",               # r=-0.476  自由体积
-    "VPD_MolWt_per_RU",              # r=+0.472  分子量/RU
-    # === Tier 2: 0.3 < |r| < 0.5, 辅助特征 ===
-    "L1_Chi0v",                      # r=+0.429
-    "L1_MolLogP",                    # r=+0.387
-    "VPD_TPSA_per_RU",               # r=+0.380
-    "L1_Chi1v",                      # r=+0.377
-    "interaction_types",             # r=+0.365
-    "GC_coverage",                   # r=-0.358
-    "L1_Kappa1",                     # r=+0.348
-    "PPF_symmetry_index",            # r=-0.332
-    # === Tier 3: Pearson 低但 Spearman 高 (非线性) ===
-    "PPF_M_per_f",                   # P=+0.193, S=+0.737! 非线性王者
-    "total_hbond_density",           # P=+0.215, S=+0.358
-    "ced_weighted_sum",              # P=+0.131, S=+0.333
-    # === Tier 4: chain_physics top 3 ===
-    "CP_curl_ratio",                 # P=-0.310, S=-0.295
-    "CP_Neff_ratio",                 # P=-0.280, S=-0.306
-    "CP_conf_strain",                # P=+0.242, S=+0.388
-    # === 额外: 边界有用 ===
-    "VPD_RotBonds_delta",            # P=-0.291, S=-0.303
-    "PPF_CED_hbond_frac",           # P=+0.289, S=+0.311
-    "L1_NumHAcceptors",              # P=+0.244, S=+0.298
+    "PPF_flexible_bond_density", "VPD_RingCount_per_RU", "L1_FractionCSP3",
+    "L0_FlexibilityIndex", "L1_NumAromaticRings", "GC_Tg",
+    "PPF_steric_volume", "L0_SOL", "PPF_CED_estimate",
+    "PPF_backbone_rigidity", "PPF_side_chain_ratio", "IC_hydrophobic_ratio",
+    "L1_BalabanJ", "VPD_junction_flex_ratio", "VPD_HeavyAtom_per_RU",
+    "IC_MolMR", "PPF_Vf_estimate", "VPD_MolWt_per_RU",
+    "L1_Chi0v", "L1_MolLogP", "VPD_TPSA_per_RU", "L1_Chi1v",
+    "interaction_types", "GC_coverage", "L1_Kappa1", "PPF_symmetry_index",
+    "PPF_M_per_f", "total_hbond_density", "ced_weighted_sum",
+    "CP_curl_ratio", "CP_Neff_ratio", "CP_conf_strain",
+    "VPD_RotBonds_delta", "PPF_CED_hbond_frac", "L1_NumHAcceptors",
+]
+
+# ── 轻度修剪: 只去垃圾 + 完全重复 (64 - 8 = 56d) ──
+DROP_FEATURES = [
+    "CP_oligomer_level",       # 常量, 零方差
+    "CP_Cn_proxy",             # |r|=0.01, 物理方向错
+    "PPF_ring_strain_proxy",   # |r|=0.03, |ρ|=0.03
+    "hbond_network_potential",  # |r|=0.02, |ρ|=0.09
+    "L1_RingCount",            # = VPD_RingCount_per_RU
+    "L1_HeavyAtomCount",       # = VPD_HeavyAtom_per_RU
+    "L1_MolWt",                # = VPD_MolWt_per_RU
+    "IC_hydrophilic_ratio",    # = -IC_hydrophobic_ratio
 ]
 
 
@@ -215,14 +199,24 @@ def main():
     print(f"  Tier 4 (CP top3):  {sum(1 for f in sel_valid[29:32])}")
     print(f"  Tier 5 (边界):     {sum(1 for f in sel_valid[32:])}")
 
+    # Light pruning: drop junk + exact duplicates
+    pruned_names = [f for f in all_names if f not in DROP_FEATURES]
+    pruned_idx = [all_names.index(f) for f in pruned_names]
+    X_pruned = X_full[:, pruned_idx]
+    print(f"Light-pruned features: {len(pruned_names)}d (dropped {len(DROP_FEATURES)} junk/dupes)")
+
     # Run experiments
     results = {}
 
-    # 1. PHY-C-select
+    # 1. PHY-C-light (轻度修剪 56d)
+    m0 = run_experiment("PHY-C-light", X_pruned, y, pruned_names)
+    results["PHY-C-light"] = (len(pruned_names), m0)
+
+    # 2. PHY-C-select (激进筛选 35d)
     m1 = run_experiment("PHY-C-select", X_select, y, sel_valid)
     results["PHY-C-select"] = (len(sel_valid), m1)
 
-    # 2. PHY-C-full 64d
+    # 3. PHY-C-full 64d
     m2 = run_experiment("PHY-C-full", X_full, y, all_names)
     results["PHY-C-full"] = (64, m2)
 
