@@ -23,22 +23,80 @@ except ImportError:
 
 MODEL_NAME = "kuelumbus/polyBERT"
 
+# HuggingFace mirror for China mainland servers
+HF_MIRRORS = [
+    None,                                    # Try official first (or cached)
+    "https://hf-mirror.com",                 # China mirror
+    "https://huggingface.co",                # Explicit official
+]
+
 # Singleton cache
 _MODEL = None
 _TOKENIZER = None
 
 
-def _load_model(device: str = "cuda"):
-    """Lazy-load polyBERT model and tokenizer."""
+def _load_model(device: str = "cuda", local_path: str = None):
+    """Lazy-load polyBERT model and tokenizer.
+
+    Tries: local_path → offline cache → mirrors → official HuggingFace.
+    """
     global _MODEL, _TOKENIZER
-    if _MODEL is None:
-        if not HAS_TRANSFORMERS:
-            raise ImportError("transformers not installed. Run: pip install transformers")
-        print(f"  Loading polyBERT from {MODEL_NAME}...")
+    if _MODEL is not None:
+        return _MODEL, _TOKENIZER
+
+    if not HAS_TRANSFORMERS:
+        raise ImportError("transformers not installed. Run: pip install transformers")
+
+    import os
+
+    # Try local path first
+    if local_path and os.path.isdir(local_path):
+        print(f"  Loading polyBERT from local: {local_path}")
+        _TOKENIZER = AutoTokenizer.from_pretrained(local_path)
+        _MODEL = AutoModel.from_pretrained(local_path).to(device).eval()
+        print(f"  polyBERT loaded on {device}")
+        return _MODEL, _TOKENIZER
+
+    # Try offline mode (use existing cache without network)
+    try:
+        print(f"  Trying offline cache for {MODEL_NAME}...")
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
         _TOKENIZER = AutoTokenizer.from_pretrained(MODEL_NAME)
         _MODEL = AutoModel.from_pretrained(MODEL_NAME).to(device).eval()
-        print(f"  polyBERT loaded on {device}")
-    return _MODEL, _TOKENIZER
+        print(f"  polyBERT loaded from cache on {device}")
+        return _MODEL, _TOKENIZER
+    except Exception:
+        pass
+    finally:
+        os.environ.pop("HF_HUB_OFFLINE", None)
+        os.environ.pop("TRANSFORMERS_OFFLINE", None)
+
+    # Try mirrors
+    for mirror in HF_MIRRORS:
+        try:
+            if mirror:
+                os.environ["HF_ENDPOINT"] = mirror
+                print(f"  Trying mirror: {mirror}")
+            else:
+                os.environ.pop("HF_ENDPOINT", None)
+                print(f"  Trying default HuggingFace...")
+
+            _TOKENIZER = AutoTokenizer.from_pretrained(MODEL_NAME)
+            _MODEL = AutoModel.from_pretrained(MODEL_NAME).to(device).eval()
+            print(f"  polyBERT loaded on {device}")
+            return _MODEL, _TOKENIZER
+        except Exception as e:
+            print(f"  Failed: {type(e).__name__}")
+            _MODEL, _TOKENIZER = None, None
+
+    os.environ.pop("HF_ENDPOINT", None)
+    raise RuntimeError(
+        "Cannot load polyBERT. Options:\n"
+        "  1. Set HF_ENDPOINT=https://hf-mirror.com before running\n"
+        "  2. Download model locally and pass local_path\n"
+        "  3. Run: huggingface-cli download kuelumbus/polyBERT on a machine with internet"
+    )
 
 
 def _psmiles_format(smiles: str) -> str:
