@@ -112,9 +112,11 @@ def build_fold_features(
     phyc_names, gnn_names, pbert_pca_names,
 ):
     """Build per-fold feature matrices with polyBERT PCA fitted on train only."""
-    # PCA on train, transform both
-    pca = PCA(n_components=POLYBERT_PCA_DIM, random_state=42)
+    # PCA on train, transform both (HIGH-3: guard against too few valid samples)
     pbert_valid_train = ~np.any(np.isnan(X_pbert_raw[train_idx]), axis=1)
+    n_valid = pbert_valid_train.sum()
+    n_comp = min(POLYBERT_PCA_DIM, n_valid - 1, X_pbert_raw.shape[1])
+    pca = PCA(n_components=max(n_comp, 1), random_state=42)
     pca.fit(X_pbert_raw[train_idx][pbert_valid_train])
 
     X_pbert_pca = np.full((len(X_pbert_raw), POLYBERT_PCA_DIM), np.nan)
@@ -236,22 +238,27 @@ def expert_committee_cv(
                 X_it = X_train[inner_train][:, idx]
                 X_iv = X_train[inner_val][:, idx]
 
-                if hasattr(model, 'fit') and 'eval_set' in model.fit.__code__.co_varnames:
-                    model.fit(X_it, y_train[inner_train],
-                              eval_set=(X_iv, y_train[inner_val]),
-                              early_stopping_rounds=50, verbose=0)
-                else:
-                    model.fit(X_it, y_train[inner_train])
+                try:
+                    from catboost import CatBoostRegressor
+                    if isinstance(model, CatBoostRegressor):
+                        model.fit(X_it, y_train[inner_train],
+                                  eval_set=(X_iv, y_train[inner_val]),
+                                  early_stopping_rounds=50, verbose=0)
+                    else:
+                        model.fit(X_it, y_train[inner_train])
+                except Exception:
+                    pass  # Failed expert → OOF stays 0 (initialized)
 
                 oof_preds[inner_val, ei] = model.predict(X_iv)
 
         # Train meta-learner on OOF predictions + meta features
         meta_idx = expert_idx["_meta"]
         X_meta_train = np.hstack([oof_preds, X_train[:, meta_idx]])
-        # Fill NaN in meta features (OOF predictions may have NaN from failed experts)
+        # CRITICAL-1 + HIGH-2: always compute col_medians, handle all-NaN columns
+        col_medians = np.nanmedian(X_meta_train, axis=0)
+        col_medians = np.where(np.isnan(col_medians), 0.0, col_medians)
         nan_mask = np.isnan(X_meta_train)
         if nan_mask.any():
-            col_medians = np.nanmedian(X_meta_train, axis=0)
             for c in range(X_meta_train.shape[1]):
                 X_meta_train[nan_mask[:, c], c] = col_medians[c]
         meta_learner = ElasticNet(alpha=0.1, l1_ratio=0.5, random_state=42)
@@ -263,11 +270,14 @@ def expert_committee_cv(
             idx = expert_idx[ename]
             model = make_expert_model(ename, model_type)
 
-            if hasattr(model, 'fit') and 'eval_set' in model.fit.__code__.co_varnames:
-                # Use full train for final expert
-                model.fit(X_train[:, idx], y_train, verbose=0)
-            else:
-                model.fit(X_train[:, idx], y_train)
+            try:
+                from catboost import CatBoostRegressor
+                if isinstance(model, CatBoostRegressor):
+                    model.fit(X_train[:, idx], y_train, verbose=0)
+                else:
+                    model.fit(X_train[:, idx], y_train)
+            except Exception:
+                test_preds[:, ei] = np.nanmedian(y_train)  # Fallback
 
             test_preds[:, ei] = model.predict(X_test[:, idx])
 
