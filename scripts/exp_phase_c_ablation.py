@@ -34,33 +34,64 @@ DATA_PATH = PROJECT_ROOT / "data" / "unified_tg.parquet"
 RESULT_DIR = PROJECT_ROOT / "results" / "phase_c"
 
 
+def _cache_path(layer: str) -> Path:
+    """Return path for cached feature matrix."""
+    return PROJECT_ROOT / "data" / f"feature_matrix_{layer}.parquet"
+
+
 def load_and_featurize(layer: str) -> Tuple[np.ndarray, np.ndarray, List[str]]:
-    """Load unified dataset and compute features."""
-    print(f"\n  Loading data and computing {layer} features...")
-    df = load_unified_dataset(str(DATA_PATH), split=None)
-    print(f"  Total samples: {len(df)}")
+    """Load unified dataset and compute features (with parquet cache)."""
+    import pandas as pd
 
     feature_names = get_feature_names(layer)
-    X_list, y_list = [], []
-    skipped = 0
-    t0 = time.time()
+    cache = _cache_path(layer)
 
-    for idx, row in df.iterrows():
-        try:
-            x = compute_features(row["smiles"], layer=layer)
-            X_list.append(x)
-            y_list.append(float(row["tg_k"]))
-        except Exception:
-            skipped += 1
+    # Try loading from cache
+    if cache.exists():
+        print(f"\n  Loading cached {layer} features: {cache}")
+        df_cache = pd.read_parquet(cache)
+        X = df_cache[feature_names].values
+        y = df_cache["tg_k"].values
+        print(f"  Loaded: {X.shape[0]} samples, {X.shape[1]} features (cached)")
+    else:
+        print(f"\n  Loading data and computing {layer} features...")
+        df = load_unified_dataset(str(DATA_PATH), split=None)
+        print(f"  Total samples: {len(df)}")
 
-    elapsed = time.time() - t0
-    X = np.array(X_list)
-    y = np.array(y_list)
+        X_list, y_list, smi_list = [], [], []
+        skipped = 0
+        t0 = time.time()
+        total = len(df)
+
+        for i, (idx, row) in enumerate(df.iterrows()):
+            if (i + 1) % 500 == 0:
+                elapsed = time.time() - t0
+                eta = elapsed / (i + 1) * (total - i - 1)
+                print(f"  [{i+1}/{total}] elapsed={elapsed:.0f}s, ETA={eta:.0f}s")
+            try:
+                x = compute_features(row["smiles"], layer=layer)
+                X_list.append(x)
+                y_list.append(float(row["tg_k"]))
+                smi_list.append(row["smiles"])
+            except Exception:
+                skipped += 1
+
+        elapsed = time.time() - t0
+        X = np.array(X_list)
+        y = np.array(y_list)
+        print(f"  Features: {X.shape[1]}d, extracted in {elapsed:.1f}s, skipped: {skipped}")
+
+        # Save cache for future runs
+        df_save = pd.DataFrame(X, columns=feature_names)
+        df_save["tg_k"] = y
+        df_save["smiles"] = smi_list
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        df_save.to_parquet(cache, index=False)
+        print(f"  Cached: {cache}")
 
     nan_mask = np.any(np.isnan(X), axis=1)
     n_nan = nan_mask.sum()
-    print(f"  Features: {X.shape[1]}d, extracted in {elapsed:.1f}s")
-    print(f"  Skipped: {skipped}, NaN rows: {n_nan}")
+    print(f"  NaN rows: {n_nan}")
 
     # CatBoost handles NaN natively — only drop all-NaN rows
     all_nan = np.all(np.isnan(X), axis=1)

@@ -22,7 +22,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 DATA_PATH = PROJECT_ROOT / "data" / "unified_tg.parquet"
 CP_PATH = PROJECT_ROOT / "data" / "chain_physics_features.parquet"
-MATRIX_CACHE = PROJECT_ROOT / "data" / "feature_matrix_PHY-C.parquet"
+MATRIX_CACHE_DIR = PROJECT_ROOT / "data"
 RESULT_DIR = PROJECT_ROOT / "results" / "phase_c"
 
 
@@ -82,17 +82,17 @@ def quick_chain_physics():
     return result
 
 
-def full_64d():
-    """Full PHY-C 64d correlation (uses cached matrix if available)."""
+def full_64d(layer: str = "PHY-C"):
+    """Full correlation (uses cached matrix if available)."""
     from src.data.external_datasets import load_unified_dataset
     from src.features.feature_pipeline import compute_features, get_feature_names
 
-    layer = "PHY-C"
     feat_names = get_feature_names(layer)
+    cache = MATRIX_CACHE_DIR / f"feature_matrix_{layer}.parquet"
 
-    if MATRIX_CACHE.exists():
-        print(f"Loading cached feature matrix: {MATRIX_CACHE}")
-        df_cache = pd.read_parquet(MATRIX_CACHE)
+    if cache.exists():
+        print(f"Loading cached feature matrix: {cache}")
+        df_cache = pd.read_parquet(cache)
         X = df_cache[feat_names].values
         y = df_cache["tg_k"].values
         print(f"  Loaded: {X.shape[0]} samples, {X.shape[1]} features")
@@ -123,8 +123,9 @@ def full_64d():
         df_save = pd.DataFrame(X, columns=feat_names)
         df_save["tg_k"] = y
         df_save["smiles"] = smi_list
-        df_save.to_parquet(MATRIX_CACHE, index=False)
-        print(f"  Cached: {MATRIX_CACHE}")
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        df_save.to_parquet(cache, index=False)
+        print(f"  Cached: {cache}")
 
     result = correlate(X, y, feat_names)
     print_table(result, f"{layer} {len(feat_names)}d — All Feature Correlations with Tg")
