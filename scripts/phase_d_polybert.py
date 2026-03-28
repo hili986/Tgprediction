@@ -38,23 +38,22 @@ DROP = [
 
 def extract_and_cache(local_model: str = None):
     """Extract polyBERT embeddings and save to parquet."""
-    from src.gnn.polybert_embedder import extract_polybert_embeddings, _load_model
-
-    # Pre-load model with local path if specified
-    if local_model:
-        _load_model(device="cuda", local_path=local_model)
+    from src.gnn.polybert_embedder import extract_polybert_embeddings
 
     df = pd.read_parquet(DATA_PATH)
     smiles_list = df["smiles"].tolist()
     print(f"Extracting polyBERT embeddings for {len(smiles_list)} SMILES...")
 
     t0 = time.time()
-    embeddings = extract_polybert_embeddings(smiles_list, batch_size=64, device="cuda")
+    embeddings = extract_polybert_embeddings(
+        smiles_list, batch_size=64, device="cuda", local_path=local_model,
+    )
     elapsed = time.time() - t0
     print(f"  Extraction done in {elapsed:.0f}s")
 
-    # Save raw 768d embeddings
-    col_names = [f"pBERT_{i}" for i in range(768)]
+    # Save raw embeddings (600d for polyBERT)
+    embed_dim = embeddings.shape[1]
+    col_names = [f"pBERT_{i}" for i in range(embed_dim)]
     df_embed = pd.DataFrame(embeddings, columns=col_names)
     df_embed["smiles"] = smiles_list
     df_embed.to_parquet(POLYBERT_CACHE, index=False)
