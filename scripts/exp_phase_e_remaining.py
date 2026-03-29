@@ -81,6 +81,10 @@ def load_186d():
         df_orig = pd.read_parquet(DATA_PATH)
         smiles = df_orig["smiles"].tolist()
 
+    # H1: Row alignment check
+    assert X_phyc.shape[0] == X_gnn.shape[0] == X_pbert_raw.shape[0], \
+        f"Row count mismatch: PHY-C={X_phyc.shape[0]}, GNN={X_gnn.shape[0]}, pBERT={X_pbert_raw.shape[0]}"
+
     print(f"Loaded 186d: {X_full.shape}, samples={len(y)}")
     return X_full, y, full_names, keep_names, gnn_names, pbert_names, smiles
 
@@ -227,38 +231,49 @@ def run_error_map(X_full, y, full_names, smiles_list):
     from tabpfn import TabPFNRegressor
     from rdkit import Chem
     from rdkit.Chem import Descriptors, rdMolDescriptors
+    from sklearn.model_selection import KFold
 
     print(f"\n{'='*65}")
     print("  3. 误差地图 (|error| > 50K)")
     print(f"{'='*65}")
 
-    # Collect OOF predictions from full CV
+    # C1 fix: manual single-pass KFold to track original indices
     pp = build_preprocessing()
     X_pp = pp.fit_transform(X_full)
 
-    _, result = run_tabpfn_cv(X_full, y, "Error map (full 186d)")
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    y_pred_map = np.full(len(y), np.nan)
 
-    y_true = np.array(result["y_true_all"])
-    y_pred = np.array(result["y_pred_all"])
-    errors = y_pred - y_true
+    model = TabPFNRegressor()
+    for train_idx, test_idx in kf.split(X_pp):
+        model.fit(X_pp[train_idx], y[train_idx])
+        y_pred_map[test_idx] = model.predict(X_pp[test_idx])
+
+    # Now y_pred_map[i] is the OOF prediction for sample i (aligned with smiles_list)
+    valid = ~np.isnan(y_pred_map)
+    errors = y_pred_map[valid] - y[valid]
     abs_errors = np.abs(errors)
+    valid_idx = np.where(valid)[0]
+
+    print(f"  OOF predictions: {valid.sum()}/{len(y)} valid")
+    print(f"  Overall MAE: {abs_errors.mean():.1f}K")
 
     # High error analysis
     threshold = 50.0
     high_err_mask = abs_errors > threshold
     n_high = high_err_mask.sum()
-    print(f"\n  |error| > {threshold}K: {n_high} samples ({100*n_high/len(y_true):.1f}%)")
+    print(f"\n  |error| > {threshold}K: {n_high} samples ({100*n_high/len(y):.1f}%)")
 
     if n_high == 0:
         print("  No high-error samples found!")
         return {}
 
-    # Analyze high-error molecules
-    high_idx = np.where(high_err_mask)[0]
+    # Map back to original dataset indices
+    high_original_idx = valid_idx[high_err_mask]
     analysis = {
         "threshold_K": threshold,
         "n_high_error": int(n_high),
-        "pct_high_error": float(100 * n_high / len(y_true)),
+        "pct_high_error": float(100 * n_high / len(y)),
         "mean_abs_error_high": float(abs_errors[high_err_mask].mean()),
         "mean_abs_error_low": float(abs_errors[~high_err_mask].mean()),
     }
@@ -268,12 +283,10 @@ def run_error_map(X_full, y, full_names, smiles_list):
     ring_counts, aromatic_counts, mw_list, tg_list = [], [], [], []
     has_metal, has_halogen, has_si = 0, 0, 0
 
-    for idx in high_idx:
-        smi = smiles_list[idx] if idx < len(smiles_list) else None
-        tg_list.append(float(y_true[idx]))
+    for idx in high_original_idx:
+        smi = smiles_list[idx]
+        tg_list.append(float(y[idx]))
 
-        if smi is None:
-            continue
         try:
             mol = Chem.MolFromSmiles(smi.replace("[*]", "[H]"))
             if mol is None:
@@ -307,7 +320,7 @@ def run_error_map(X_full, y, full_names, smiles_list):
     tg_bins = [(100, 200), (200, 300), (300, 400), (400, 500), (500, 600), (600, 900)]
     tg_dist_all = Counter()
     tg_dist_high = Counter()
-    for t in y_true:
+    for t in y:
         for lo, hi in tg_bins:
             if lo <= t < hi:
                 tg_dist_all[f"{lo}-{hi}K"] += 1
@@ -323,7 +336,7 @@ def run_error_map(X_full, y, full_names, smiles_list):
         key = f"{lo}-{hi}K"
         h = tg_dist_high.get(key, 0)
         a = tg_dist_all.get(key, 0)
-        enrich = (h / n_high) / (a / len(y_true)) if a > 0 else 0
+        enrich = (h / n_high) / (a / len(y)) if a > 0 else 0
         print(f"  {key:<12s} {h:>10d} {a:>10d} {enrich:>10.2f}x")
 
     analysis["tg_distribution"] = {
@@ -335,7 +348,7 @@ def run_error_map(X_full, y, full_names, smiles_list):
     print(f"\n  误差统计:")
     print(f"  全部样本: MAE={abs_errors.mean():.1f}K, RMSE={np.sqrt((errors**2).mean()):.1f}K")
     print(f"  高误差:   MAE={abs_errors[high_err_mask].mean():.1f}K (n={n_high})")
-    print(f"  低误差:   MAE={abs_errors[~high_err_mask].mean():.1f}K (n={len(y_true)-n_high})")
+    print(f"  低误差:   MAE={abs_errors[~high_err_mask].mean():.1f}K (n={valid.sum()-n_high})")
 
     ha = analysis["high_error_molecules"]
     print(f"\n  高误差分子特征:")
@@ -424,8 +437,9 @@ def run_nucleotide_transfer():
             print(f"  {name:<6s} Failed: {e}")
             nuc_results[name] = {"error": str(e)}
 
-    avg_error = np.mean([v["error_K"] for v in nuc_results.values() if "error_K" in v])
-    print(f"\n  平均误差: {avg_error:.1f}K")
+    errors_list = [v["error_K"] for v in nuc_results.values() if "error_K" in v]
+    avg_error = float(np.mean(errors_list)) if errors_list else float("nan")
+    print(f"\n  平均误差: {avg_error:.1f}K" if errors_list else "\n  所有核苷酸预测失败!")
 
     results = {
         "L1H_baseline": m_l1h,
