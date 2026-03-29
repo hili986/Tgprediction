@@ -35,19 +35,19 @@ docs/
   plans/          → 实验计划
 ```
 
-## 当前状态 (2026-03-24)
+## 当前状态 (2026-03-29)
 - **方案A**: 100% 完成 (Phase 1-5B, E1-E26)
-- **最优通用预测**: TabPFN v2 + PHY-C-light 58d, R²=0.9050, MAE=22.4K (零调参)
+- **最优通用预测**: TabPFN v2 + 186d (PHY-C 58d + GNN 64d + polyBERT 64d), R²=0.9165, MAE=20.4K (零调参)
 - **核酸迁移**: CatBoost, ATP 4.7K, ADP 0.4K
 - **学习计划**: 4 阶段完成 (Tg 物理→SHAP 解读→文献精读→原创假说)
-- **多尺度重构进行中**:
+- **多尺度重构已完成**:
   - Phase A: 数据诊断 ✅ (R²天花板 0.96-0.99)
   - Phase B: 特征工程 ✅ (PHY 48d: R²=0.8724, MAE=28.5K, +0.6% vs M2M-V)
   - Phase B2: 链间相互作用 ✅ (PHY-B2 56d: R²=0.8836, MAE=27.0K, +0.84%)
   - Phase C: 链段物理特征 ✅ (PHY-C-light 58d: TabPFN R²=0.9050, CatBoost R²=0.8831)
-  - Phase D: GNN + polyBERT 嵌入 ⏳
-  - Phase E: 物理专家委员会 ⏳
-- **当前最优特征集 PHY-C-light 58d**: PHY-B2(56d) + chain_physics(3d: curl_ratio, Neff_ratio, conf_strain) - 冗余(1d: IC_hydrophilic_ratio)
+  - Phase D: GNN + polyBERT 嵌入 ✅ (GNN 64d + polyBERT PCA 64d)
+  - Phase E: 物理专家委员会 ✅ (TabPFN 直接 186d 最优, R²=0.9165, MAE=20.4K)
+- **最终特征集 186d**: PHY-C-light(58d) + GNN嵌入(64d) + polyBERT PCA(64d)
 
 ## 当前执行方案 — 物理驱动多尺度重构
 > 详细方案: `docs/plans/方案待选-物理驱动多尺度算法重构.md` (v3)
@@ -73,8 +73,8 @@ docs/
 Phase A (Day 1):  数据诊断 + 清洗
 Phase B (Day 2):  尺度 1-2 特征 (RBP, GC, HBond, FV)
 Phase C (Day 3-5): 尺度 3 链段物理 (curl_ratio, Neff_ratio, conf_strain) — ✅ 完成
-Phase D (Day 6-8): 尺度 4-5 预训练嵌入 (GNN, polyBERT) — A800
-Phase E (Day 9-12): 物理专家委员会集成 + 消融
+Phase D (Day 6-8): 尺度 4-5 预训练嵌入 (GNN 64d, polyBERT 64d) — ✅ 完成
+Phase E (Day 9-12): 物理专家委员会集成 + 消融 — ✅ 完成 (TabPFN 186d 最优)
 ```
 
 ### 模型架构: 物理专家委员会
