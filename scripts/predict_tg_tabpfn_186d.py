@@ -10,14 +10,18 @@ This script is intended for server-side inference on new repeat-unit SMILES.
 Supported modes:
     1. Homopolymer prediction from one repeat-unit SMILES
     2. Binary copolymer prediction from two repeat-unit SMILES + composition w1
-    3. Batch CSV prediction
+    3. Multi-component copolymer prediction from arbitrary components + weights
+    4. Batch CSV prediction
 
 Important:
     - Input should be repeat-unit SMILES with two attachment points (* or [*]).
-    - Binary copolymer prediction is an engineering approximation:
+    - Multi-component copolymer prediction is an engineering approximation:
       weighted mixing of component descriptors / embeddings.
       It is useful for exploratory comparison, but is not a separately
       benchmarked copolymer model.
+    - `architecture=block` is only a proxy mode:
+      the script reports a Fox-style miscible-equivalent Tg and a component
+      Tg window, because true block sequencing is not explicitly modeled.
 
 Required server artifacts:
     data/unified_tg.parquet
@@ -30,6 +34,8 @@ Required server artifacts:
 Examples:
     python scripts/predict_tg_tabpfn_186d.py --smiles "*CC(*)"
     python scripts/predict_tg_tabpfn_186d.py --smiles1 "*CC(*)" --smiles2 "*CO(*)" --w1 0.5
+    python scripts/predict_tg_tabpfn_186d.py --architecture random \
+      --component "*CC(*)::0.6" --component "*CO(*)::0.3" --component "*CN(*)::0.1"
     python scripts/predict_tg_tabpfn_186d.py --input-csv data/query.csv --output results/pred.csv
 """
 
@@ -37,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import warnings
 from dataclasses import dataclass
@@ -73,6 +80,9 @@ PHY_C_LIGHT_DIM = 58
 GNN_DIM = 64
 PBERT_PCA_DIM = 64
 FULL_DIM = PHY_C_LIGHT_DIM + GNN_DIM + PBERT_PCA_DIM
+SUPPORTED_ARCHITECTURES = {"random", "block"}
+COMPONENT_COL_RE = re.compile(r"^(?:smiles|component)_?(\d+)$", re.IGNORECASE)
+WEIGHT_COL_RE = re.compile(r"^(?:w|weight)_?(\d+)$", re.IGNORECASE)
 
 
 @dataclass
@@ -99,6 +109,66 @@ def _validate_repeat_unit_smiles(smiles: str) -> str:
             f"SMILES '{smi}' does not look like a repeat-unit SMILES with two attachment points."
         )
     return smi
+
+
+def _normalize_weights(weights: Sequence[float]) -> np.ndarray:
+    arr = np.asarray(weights, dtype=float)
+    if arr.ndim != 1 or arr.size == 0:
+        raise ValueError("Weights must be a non-empty 1D sequence.")
+    if np.any(~np.isfinite(arr)):
+        raise ValueError("Weights contain NaN/inf.")
+    if np.any(arr < 0):
+        raise ValueError("Weights must be non-negative.")
+    total = float(arr.sum())
+    if total <= 0:
+        raise ValueError("Weights must sum to a positive value.")
+    return arr / total
+
+
+def _fox_blend_tg(tg_values_k: Sequence[float], weights: Sequence[float]) -> float:
+    tg = np.asarray(tg_values_k, dtype=float)
+    w = _normalize_weights(weights)
+    if np.any(~np.isfinite(tg)) or np.any(tg <= 0):
+        return float("nan")
+    denom = float(np.sum(w / tg))
+    if denom <= 0:
+        return float("nan")
+    return 1.0 / denom
+
+
+def _parse_component_entry(spec: str) -> Tuple[str, Optional[float]]:
+    text = (spec or "").strip()
+    if not text:
+        raise ValueError("Empty component spec.")
+    if "::" in text:
+        smiles_part, weight_part = text.rsplit("::", 1)
+        smiles = _validate_repeat_unit_smiles(smiles_part.strip())
+        try:
+            weight = float(weight_part.strip())
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid component weight in '{text}'. Expected format 'SMILES::weight'."
+            ) from exc
+        return smiles, weight
+    return _validate_repeat_unit_smiles(text), None
+
+
+def _parse_component_entries(specs: Sequence[str]) -> Tuple[List[str], List[float]]:
+    if not specs:
+        raise ValueError("No component entries provided.")
+    smiles_list: List[str] = []
+    weights: List[Optional[float]] = []
+    for spec in specs:
+        smiles, weight = _parse_component_entry(spec)
+        smiles_list.append(smiles)
+        weights.append(weight)
+
+    present = [w is not None for w in weights]
+    if any(present) and not all(present):
+        raise ValueError("Either provide weights for all components or for none of them.")
+
+    final_weights = [float(w) for w in weights] if all(present) else [1.0] * len(smiles_list)
+    return smiles_list, final_weights
 
 
 def _resolve_device(requested: str) -> str:
@@ -393,10 +463,13 @@ class BestTgPredictor:
         pred = float(self.model.predict(x_pp)[0])
         return pred
 
+    def _predict_component_homopolymer_k(self, component: Dict[str, np.ndarray | str]) -> float:
+        x_full = np.hstack([component["phyc"], component["gnn"], component["pbert"]])
+        return self._predict_from_full_vector(x_full)
+
     def predict_homopolymer(self, smiles: str) -> Dict[str, object]:
         comp = self.featurize_component(smiles)
-        x_full = np.hstack([comp["phyc"], comp["gnn"], comp["pbert"]])
-        tg_k = self._predict_from_full_vector(x_full)
+        tg_k = self._predict_component_homopolymer_k(comp)
         return {
             "mode": "homopolymer",
             "smiles": comp["smiles"],
@@ -406,38 +479,110 @@ class BestTgPredictor:
             "model": "TabPFN_v2_on_186d",
         }
 
+    def predict_multicomponent(
+        self,
+        smiles_list: Sequence[str],
+        weights: Sequence[float],
+        architecture: str = "random",
+    ) -> Dict[str, object]:
+        if architecture not in SUPPORTED_ARCHITECTURES:
+            raise ValueError(
+                f"Unsupported architecture '{architecture}'. Expected one of: "
+                f"{sorted(SUPPORTED_ARCHITECTURES)}."
+            )
+
+        clean_smiles = [_validate_repeat_unit_smiles(s) for s in smiles_list]
+        norm_weights = _normalize_weights(weights)
+        if len(clean_smiles) != len(norm_weights):
+            raise ValueError("Number of SMILES and weights must match.")
+
+        if len(clean_smiles) == 1:
+            result = self.predict_homopolymer(clean_smiles[0])
+            result["architecture"] = "homopolymer"
+            return result
+
+        components = [self.featurize_component(smi) for smi in clean_smiles]
+        phyc_mix = np.sum(
+            [w * np.asarray(comp["phyc"], dtype=float) for w, comp in zip(norm_weights, components)],
+            axis=0,
+        )
+        gnn_mix = np.sum(
+            [w * np.asarray(comp["gnn"], dtype=float) for w, comp in zip(norm_weights, components)],
+            axis=0,
+        )
+        pbert_mix = np.sum(
+            [w * np.asarray(comp["pbert"], dtype=float) for w, comp in zip(norm_weights, components)],
+            axis=0,
+        )
+        descriptor_mix_tg_k = self._predict_from_full_vector(np.hstack([phyc_mix, gnn_mix, pbert_mix]))
+
+        component_tg_k = [self._predict_component_homopolymer_k(comp) for comp in components]
+        fox_tg_k = _fox_blend_tg(component_tg_k, norm_weights)
+
+        primary_tg_k = descriptor_mix_tg_k
+        primary_method = "weighted_descriptor_embedding_mix"
+        warning = (
+            "Random copolymer output uses weighted mixing of component descriptors/embeddings. "
+            "Treat as exploratory inference."
+        )
+        if architecture == "block":
+            if np.isfinite(fox_tg_k):
+                primary_tg_k = fox_tg_k
+                primary_method = "fox_proxy_from_component_homopolymer_predictions"
+            warning = (
+                "Block architecture is approximated only. Primary Tg uses a Fox-style proxy "
+                "when available, and real block copolymers may exhibit multiple transitions."
+            )
+
+        component_rows = []
+        for idx, (comp, w, tg_k) in enumerate(zip(components, norm_weights, component_tg_k), start=1):
+            component_rows.append(
+                {
+                    "index": idx,
+                    "smiles": comp["smiles"],
+                    "weight": float(w),
+                    "chain_physics_source": comp["chain_physics_source"],
+                    "homopolymer_tg_k_pred": float(tg_k),
+                    "homopolymer_tg_c_pred": float(tg_k - 273.15),
+                }
+            )
+
+        result = {
+            "mode": "binary_copolymer" if len(clean_smiles) == 2 else "multicomponent_copolymer",
+            "architecture": architecture,
+            "n_components": len(clean_smiles),
+            "components": component_rows,
+            "weights_normalized": [float(w) for w in norm_weights],
+            "tg_k_pred": float(primary_tg_k),
+            "tg_c_pred": float(primary_tg_k - 273.15),
+            "primary_method": primary_method,
+            "descriptor_mix_tg_k": float(descriptor_mix_tg_k),
+            "descriptor_mix_tg_c": float(descriptor_mix_tg_k - 273.15),
+            "fox_reference_tg_k": None if not np.isfinite(fox_tg_k) else float(fox_tg_k),
+            "fox_reference_tg_c": None if not np.isfinite(fox_tg_k) else float(fox_tg_k - 273.15),
+            "component_tg_window_k": [float(np.min(component_tg_k)), float(np.max(component_tg_k))],
+            "component_tg_window_c": [
+                float(np.min(component_tg_k) - 273.15),
+                float(np.max(component_tg_k) - 273.15),
+            ],
+            "model": "TabPFN_v2_on_186d",
+            "warning": warning,
+        }
+
+        if len(clean_smiles) == 2:
+            result["smiles1"] = clean_smiles[0]
+            result["smiles2"] = clean_smiles[1]
+            result["w1"] = float(norm_weights[0])
+            result["w2"] = float(norm_weights[1])
+            result["chain_physics_source_1"] = components[0]["chain_physics_source"]
+            result["chain_physics_source_2"] = components[1]["chain_physics_source"]
+
+        return result
+
     def predict_binary(self, smiles1: str, smiles2: str, w1: float) -> Dict[str, object]:
         if not (0.0 <= w1 <= 1.0):
             raise ValueError("w1 must be in [0, 1].")
-        w2 = 1.0 - w1
-
-        comp1 = self.featurize_component(smiles1)
-        comp2 = self.featurize_component(smiles2)
-
-        x_full = np.hstack(
-            [
-                w1 * comp1["phyc"] + w2 * comp2["phyc"],
-                w1 * comp1["gnn"] + w2 * comp2["gnn"],
-                w1 * comp1["pbert"] + w2 * comp2["pbert"],
-            ]
-        )
-        tg_k = self._predict_from_full_vector(x_full)
-        return {
-            "mode": "binary_copolymer",
-            "smiles1": comp1["smiles"],
-            "smiles2": comp2["smiles"],
-            "w1": w1,
-            "w2": w2,
-            "tg_k_pred": tg_k,
-            "tg_c_pred": tg_k - 273.15,
-            "chain_physics_source_1": comp1["chain_physics_source"],
-            "chain_physics_source_2": comp2["chain_physics_source"],
-            "model": "TabPFN_v2_on_186d",
-            "warning": (
-                "Binary copolymer prediction uses weighted mixing of component "
-                "descriptors/embeddings. Treat as exploratory inference."
-            ),
-        }
+        return self.predict_multicomponent([smiles1, smiles2], [w1, 1.0 - w1], architecture="random")
 
     def predict_batch(self, df: pd.DataFrame) -> pd.DataFrame:
         rows: List[Dict[str, object]] = []
@@ -447,16 +592,71 @@ class BestTgPredictor:
                 smiles = _cell_to_text(row.get("smiles", ""))
                 smiles1 = _cell_to_text(row.get("smiles1", ""))
                 smiles2 = _cell_to_text(row.get("smiles2", ""))
+                architecture = _cell_to_text(row.get("architecture", "random")).lower() or "random"
 
                 if smiles:
                     result = self.predict_homopolymer(smiles)
-                elif smiles1 and smiles2:
-                    w1 = float(row.get("w1", 0.5))
-                    result = self.predict_binary(smiles1, smiles2, w1)
                 else:
-                    raise ValueError(
-                        "Each row needs either 'smiles', or 'smiles1' + 'smiles2' (+ optional w1)."
-                    )
+                    specs_text = _cell_to_text(row.get("components", ""))
+                    if specs_text:
+                        specs = [part.strip() for part in specs_text.split("|") if part.strip()]
+                        smiles_list, weights = _parse_component_entries(specs)
+                        result = self.predict_multicomponent(smiles_list, weights, architecture=architecture)
+                    else:
+                        indexed_smiles: Dict[int, str] = {}
+                        indexed_weights: Dict[int, float] = {}
+                        for col in row.index:
+                            col_name = str(col)
+                            match_s = COMPONENT_COL_RE.match(col_name)
+                            if match_s:
+                                value = _cell_to_text(row.get(col, ""))
+                                if value:
+                                    indexed_smiles[int(match_s.group(1))] = value
+                                continue
+                            match_w = WEIGHT_COL_RE.match(col_name)
+                            if match_w:
+                                value = row.get(col)
+                                if not pd.isna(value) and str(value).strip() != "":
+                                    indexed_weights[int(match_w.group(1))] = float(value)
+
+                        if indexed_smiles:
+                            ordered = sorted(indexed_smiles)
+                            smiles_list = [indexed_smiles[i] for i in ordered]
+                            has_any_weight = any(i in indexed_weights for i in ordered)
+                            has_all_weight = all(i in indexed_weights for i in ordered)
+                            if has_any_weight and not has_all_weight:
+                                if len(ordered) == 2 and set(indexed_weights) in ({ordered[0]}, {ordered[1]}):
+                                    if ordered[0] in indexed_weights:
+                                        w_first = float(indexed_weights[ordered[0]])
+                                        weights = [w_first, 1.0 - w_first]
+                                    else:
+                                        w_second = float(indexed_weights[ordered[1]])
+                                        weights = [1.0 - w_second, w_second]
+                                    result = self.predict_multicomponent(
+                                        smiles_list,
+                                        weights,
+                                        architecture=architecture,
+                                    )
+                                    result["row_index"] = idx
+                                    rows.append(result)
+                                    continue
+                                raise ValueError(
+                                    "Multi-component CSV row has partial weights. Provide all or none."
+                                )
+                            weights = [indexed_weights[i] for i in ordered] if has_all_weight else [1.0] * len(ordered)
+                            result = self.predict_multicomponent(smiles_list, weights, architecture=architecture)
+                        elif smiles1 and smiles2:
+                            w1 = float(row.get("w1", row.get("weight1", 0.5)))
+                            result = self.predict_multicomponent(
+                                [smiles1, smiles2],
+                                [w1, 1.0 - w1],
+                                architecture=architecture,
+                            )
+                        else:
+                            raise ValueError(
+                                "Each row needs either 'smiles', 'components', "
+                                "or smiles/component columns like smiles1,w1,smiles2,w2,..."
+                            )
 
                 result["row_index"] = idx
                 rows.append(result)
@@ -502,9 +702,15 @@ def build_parser() -> argparse.ArgumentParser:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--smiles", type=str, help="Repeat-unit SMILES for homopolymer prediction.")
     mode.add_argument(
+        "--component",
+        action="append",
+        default=None,
+        help="Repeatable multi-component spec. Format: 'SMILES::weight'. If all weights are omitted, equal weights are assumed.",
+    )
+    mode.add_argument(
         "--input-csv",
         type=str,
-        help="Batch input CSV. Columns: smiles, or smiles1/smiles2/w1.",
+        help="Batch input CSV. Columns: smiles, or components, or smiles1/w1/smiles2/w2/..., plus optional architecture.",
     )
     mode.add_argument(
         "--smiles1",
@@ -518,6 +724,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.5,
         help="Composition weight for component 1, used as linear mixing coefficient.",
+    )
+    parser.add_argument(
+        "--architecture",
+        type=str,
+        default="random",
+        choices=sorted(SUPPORTED_ARCHITECTURES),
+        help="Approximate architecture tag. 'random' uses descriptor mixing; 'block' uses a Fox-style proxy as primary output.",
     )
     parser.add_argument("--output", type=str, default=None, help="Optional output path (.json or .csv).")
     parser.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"])
@@ -601,8 +814,22 @@ def main() -> None:
         _dump_json(result, args.output)
         return
 
+    if args.component:
+        smiles_list, weights = _parse_component_entries(args.component)
+        result = predictor.predict_multicomponent(
+            smiles_list,
+            weights,
+            architecture=args.architecture,
+        )
+        _dump_json(result, args.output)
+        return
+
     if args.smiles1:
-        result = predictor.predict_binary(args.smiles1, args.smiles2, args.w1)
+        result = predictor.predict_multicomponent(
+            [args.smiles1, args.smiles2],
+            [args.w1, 1.0 - args.w1],
+            architecture=args.architecture,
+        )
         _dump_json(result, args.output)
         return
 
