@@ -133,24 +133,30 @@ def _align_block(
     value_cols: Sequence[str],
     label: str,
 ) -> np.ndarray:
-    if "smiles" in base_df.columns and "smiles" in feat_df.columns:
-        if len(base_df) == len(feat_df) and base_df["smiles"].tolist() == feat_df["smiles"].tolist():
-            mat = feat_df[list(value_cols)].to_numpy(dtype=float)
-        else:
-            merged = base_df[["smiles"]].merge(
-                feat_df[["smiles", *value_cols]],
-                on="smiles",
-                how="left",
-                sort=False,
-                validate="one_to_one",
-            )
-            mat = merged[list(value_cols)].to_numpy(dtype=float)
-    else:
-        if len(base_df) != len(feat_df):
-            raise ValueError(
-                f"{label} cache length mismatch: base={len(base_df)}, feature={len(feat_df)}."
-            )
+    # Match the original Phase D/E training scripts:
+    # when cache lengths are equal, trust row order instead of merging on SMILES.
+    if len(base_df) == len(feat_df):
+        if "smiles" in base_df.columns and "smiles" in feat_df.columns:
+            mismatch = int((base_df["smiles"].astype(str) != feat_df["smiles"].astype(str)).sum())
+            if mismatch > 0:
+                print(
+                    f"[warn] {label}: {mismatch} SMILES rows differ between caches; "
+                    "using row-order alignment to match original training scripts."
+                )
         mat = feat_df[list(value_cols)].to_numpy(dtype=float)
+    elif "smiles" in base_df.columns and "smiles" in feat_df.columns:
+        merged = base_df[["smiles"]].merge(
+            feat_df[["smiles", *value_cols]],
+            on="smiles",
+            how="left",
+            sort=False,
+            validate="one_to_one",
+        )
+        mat = merged[list(value_cols)].to_numpy(dtype=float)
+    else:
+        raise ValueError(
+            f"{label} cache length mismatch: base={len(base_df)}, feature={len(feat_df)}."
+        )
 
     if np.isnan(mat).any():
         bad_rows = int(np.isnan(mat).any(axis=1).sum())
