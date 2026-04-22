@@ -1,0 +1,17 @@
+case_id,smiles,smiles1,w1,smiles2,w2,architecture,expected_tg_c,source,notes
+C2016-PnBA,*CC(*)C(=O)OCCCC,,,,,random,-47,10.1039/C6PY01519K,PnBA baseline
+AT2012-A-4,,*CC(*)C(=O)OCCCCOC(=O)CCN1C2=NC=NC(=C2N=C1)N,0.04,*CC(*)C(=O)OCCCC,0.96,random,-41,10.1021/ma202122r,A random copolymer
+AT2012-A-7,,*CC(*)C(=O)OCCCCOC(=O)CCN1C2=NC=NC(=C2N=C1)N,0.07,*CC(*)C(=O)OCCCC,0.93,random,-25,10.1021/ma202122r,A random copolymer
+AT2012-A-16,,*CC(*)C(=O)OCCCCOC(=O)CCN1C2=NC=NC(=C2N=C1)N,0.16,*CC(*)C(=O)OCCCC,0.84,random,0,10.1021/ma202122r,A random copolymer
+AT2012-T-10,,*CC(*)C(=O)OCCCCOC(=O)CCN1C(=O)NC(=O)C(C)=C1,0.10,*CC(*)C(=O)OCCCC,0.90,random,-30,10.1021/ma202122r,T random copolymer
+AT2012-T-20,,*CC(*)C(=O)OCCCCOC(=O)CCN1C(=O)NC(=O)C(C)=C1,0.20,*CC(*)C(=O)OCCCC,0.80,random,-14,10.1021/ma202122r,T random copolymer
+AT2012-T-32,,*CC(*)C(=O)OCCCCOC(=O)CCN1C(=O)NC(=O)C(C)=C1,0.32,*CC(*)C(=O)OCCCC,0.68,random,19,10.1021/ma202122r,T random copolymer
+C2016-CyA-3.0,,*CC(*)C(=O)OCCCCOC(=O)CCN1C(=O)N=C(N)C=C1,0.03,*CC(*)C(=O)OCCCC,0.97,random,-42,10.1039/C6PY01519K,C random copolymer
+C2016-CyA-10.5,,*CC(*)C(=O)OCCCCOC(=O)CCN1C(=O)N=C(N)C=C1,0.105,*CC(*)C(=O)OCCCC,0.895,random,-28,10.1039/C6PY01519K,C random copolymer
+C2016-CyA-21.4,,*CC(*)C(=O)OCCCCOC(=O)CCN1C(=O)N=C(N)C=C1,0.214,*CC(*)C(=O)OCCCC,0.786,random,14,10.1039/C6PY01519K,C random copolymer
+GC2024-2PGuA-co-PnBA,,*CC(*)C(=O)OCCCCOC(=O)CCN1C2=NC(NC(C2N=C1)=O)N,0.02,*CC(*)C(=O)OCCCC,0.98,random,-46,10.1002/pol.20230320,G random copolymer
+GC2024-11PGuA-co-PnBA,,*CC(*)C(=O)OCCCCOC(=O)CCN1C2=NC(NC(C2N=C1)=O)N,0.11,*CC(*)C(=O)OCCCC,0.89,random,-17,10.1002/pol.20230320,G random copolymer
+AT2012-A-100,*CC(*)C(=O)OCCCCOC(=O)CCN1C2=NC=NC(=C2N=C1)N,,,,,random,65,10.1021/ma202122r,A homopolymer
+AT2012-T-100,*CC(*)C(=O)OCCCCOC(=O)CCN1C(=O)NC(=O)C(C)=C1,,,,,random,43,10.1021/ma202122r,T homopolymer
+C2016-polyCyA,*CC(*)C(=O)OCCCCOC(=O)CCN1C(=O)N=C(N)C=C1,,,,,random,90,10.1039/C6PY01519K,C homopolymer
+GC2024-PGuA,*CC(*)C(=O)OCCCCOC(=O)CCN1C2=NC(NC(C2N=C1)=O)N,,,,,random,130,10.1002/pol.20230320,G homopolymer
