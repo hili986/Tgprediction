@@ -157,10 +157,6 @@ def _align_block(
         raise ValueError(
             f"{label} cache length mismatch: base={len(base_df)}, feature={len(feat_df)}."
         )
-
-    if np.isnan(mat).any():
-        bad_rows = int(np.isnan(mat).any(axis=1).sum())
-        raise ValueError(f"{label} alignment produced {bad_rows} rows with NaN values.")
     return mat
 
 
@@ -243,13 +239,19 @@ class BestTgPredictor:
             )
         self.pca = PCA(n_components=PBERT_PCA_DIM, random_state=42)
         self.pca.fit(X_pbert_raw[valid_pbert])
-        X_pbert = self.pca.transform(X_pbert_raw)
+        X_pbert = np.full((len(X_pbert_raw), PBERT_PCA_DIM), np.nan)
+        X_pbert[valid_pbert] = self.pca.transform(X_pbert_raw[valid_pbert])
 
         X_full = np.hstack([X_phyc, X_gnn, X_pbert])
         if X_full.shape[1] != FULL_DIM:
             raise ValueError(f"Unexpected full feature dim: {X_full.shape[1]} != {FULL_DIM}")
-        if np.isnan(X_full).any():
-            raise ValueError("Training matrix contains NaN. Check server caches first.")
+
+        valid_rows = ~np.all(np.isnan(X_full), axis=1)
+        dropped = int((~valid_rows).sum())
+        if dropped > 0:
+            print(f"[warn] dropping {dropped} all-NaN training rows to match original phase scripts.")
+        X_full = X_full[valid_rows]
+        y = y[valid_rows]
 
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import MinMaxScaler, PowerTransformer
