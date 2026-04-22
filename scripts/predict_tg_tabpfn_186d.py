@@ -586,6 +586,19 @@ class BestTgPredictor:
 
     def predict_batch(self, df: pd.DataFrame) -> pd.DataFrame:
         rows: List[Dict[str, object]] = []
+        passthrough_cols = [
+            "case_id",
+            "expected_tg_c",
+            "source",
+            "notes",
+            "architecture",
+            "smiles",
+            "smiles1",
+            "w1",
+            "smiles2",
+            "w2",
+            "components",
+        ]
 
         for idx, row in df.iterrows():
             try:
@@ -658,6 +671,15 @@ class BestTgPredictor:
                                 "or smiles/component columns like smiles1,w1,smiles2,w2,..."
                             )
 
+                for col in passthrough_cols:
+                    if col in row.index:
+                        value = row.get(col)
+                        if not pd.isna(value):
+                            result[f"input_{col}"] = value
+                expected_tg_c = row.get("expected_tg_c")
+                if not pd.isna(expected_tg_c) and "tg_c_pred" in result:
+                    result["error_c"] = float(result["tg_c_pred"]) - float(expected_tg_c)
+                    result["abs_error_c"] = abs(result["error_c"])
                 result["row_index"] = idx
                 rows.append(result)
             except Exception as exc:
