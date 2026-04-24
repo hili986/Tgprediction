@@ -155,6 +155,15 @@ class FakeBatchPredictor(FakePredictor):
         ]
 
 
+class FakeCachedErrorBatchPredictor(FakeBatchPredictor):
+    def __init__(self):
+        super().__init__()
+        self.errors_by_component = {"*CC(*)": "cached bad component"}
+
+    def get_component_error(self, component):
+        return self.errors_by_component.get(component)
+
+
 class TestJobLoop(unittest.TestCase):
     def test_job_uses_one_predictor_fit_for_many_rows(self):
         predictor = FakePredictor()
@@ -227,7 +236,7 @@ class TestJobLoop(unittest.TestCase):
                 metadata={},
             ),
             build_recipe_spec(
-                ("*CC(*)", "*CN(*)"),
+                ("*CO(*)", "*CN(*)"),
                 (0.6, 0.4),
                 architecture="random",
                 input_origin="auto",
@@ -248,6 +257,40 @@ class TestJobLoop(unittest.TestCase):
             self.assertEqual(predictor.fit_calls, 1)
             self.assertEqual(predictor.batch_predict_calls, 1)
             self.assertEqual(predictor.predict_calls, 0)
+
+    def test_job_skips_cached_component_errors_before_batch(self):
+        predictor = FakeCachedErrorBatchPredictor()
+        recipes = [
+            build_recipe_spec(
+                ("*CC(*)", "*CO(*)"),
+                (0.6, 0.4),
+                architecture="random",
+                input_origin="auto",
+                metadata={},
+            ),
+            build_recipe_spec(
+                ("*CO(*)", "*CN(*)"),
+                (0.6, 0.4),
+                architecture="random",
+                input_origin="auto",
+                metadata={},
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "virtual.csv"
+            stats = run_generation_job(
+                predictor=predictor,
+                recipes=recipes,
+                output_path=output,
+                output_format="csv",
+                chunk_size=2,
+                resume=False,
+            )
+            rows = pd.read_csv(output)
+            self.assertEqual(stats["written"], 2)
+            self.assertEqual(stats["errors"], 1)
+            self.assertEqual(predictor.batch_predict_calls, 1)
+            self.assertEqual(set(rows["status"]), {"ok", "error"})
 
 
 class TestCsvAndHybridInputs(unittest.TestCase):

@@ -29,6 +29,7 @@ class TestPrecomputedLookup(unittest.TestCase):
     def test_featurize_component_uses_precomputed_lookup_before_recompute(self):
         predictor = BestTgPredictor.__new__(BestTgPredictor)
         predictor._component_cache = {}
+        predictor._component_error_cache = {}
         predictor._precomputed_component_lookup = {
             "*CC(*)": {
                 "smiles": "*CC(*)",
@@ -77,6 +78,7 @@ class TestPrecomputedLookup(unittest.TestCase):
         predictor = BestTgPredictor.__new__(BestTgPredictor)
         predictor._component_cache = {}
         predictor._homopolymer_tg_cache = {}
+        predictor._component_error_cache = {}
         predictor._precomputed_component_lookup = {
             smiles: {
                 "smiles": smiles,
@@ -110,6 +112,29 @@ class TestPrecomputedLookup(unittest.TestCase):
         self.assertEqual(set(predictor._homopolymer_tg_cache), {"*CC(*)", "*CO(*)", "*CN(*)"})
         self.assertEqual(results[0]["tg_k_pred"], 350.0)
         self.assertEqual(results[1]["tg_k_pred"], 351.0)
+
+    def test_featurize_component_caches_failures(self):
+        predictor = BestTgPredictor.__new__(BestTgPredictor)
+        predictor._component_cache = {}
+        predictor._component_error_cache = {}
+        predictor._precomputed_component_lookup = {}
+        calls = []
+
+        def _fail(smiles):
+            calls.append(smiles)
+            raise ValueError("PHY-B2 feature extraction failed.")
+
+        predictor._compute_phyc_light = _fail
+        predictor._compute_gnn_embedding = lambda smiles: np.ones(GNN_DIM)
+        predictor._compute_polybert_pca = lambda smiles: np.ones(PBERT_PCA_DIM)
+
+        with self.assertRaisesRegex(ValueError, "Component featurization failed"):
+            predictor.featurize_component("*CC(*)")
+        with self.assertRaisesRegex(ValueError, "Component featurization failed"):
+            predictor.featurize_component("*CC(*)")
+
+        self.assertEqual(calls, ["*CC(*)"])
+        self.assertIn("*CC(*)", predictor._component_error_cache)
 
 
 if __name__ == "__main__":

@@ -457,9 +457,39 @@ def _progress(message: str) -> None:
     print(f"[{stamp}] {message}", flush=True)
 
 
+def _cached_recipe_component_error(predictor, recipe: RecipeSpec) -> Optional[str]:
+    get_component_error = getattr(predictor, "get_component_error", None)
+    if not callable(get_component_error):
+        return None
+
+    for component in recipe.components:
+        error = get_component_error(component)
+        if error:
+            return error
+    return None
+
+
 def predict_recipe_rows(predictor, recipes: Sequence[RecipeSpec]) -> Tuple[List[Dict[str, object]], int]:
     if not recipes:
         return [], 0
+
+    rows_by_index: List[Optional[Dict[str, object]]] = [None] * len(recipes)
+    pending_recipes: List[RecipeSpec] = []
+    pending_indices: List[int] = []
+    cached_errors = 0
+    for index, recipe in enumerate(recipes):
+        cached_error = _cached_recipe_component_error(predictor, recipe)
+        if cached_error:
+            cached_errors += 1
+            rows_by_index[index] = flatten_prediction_row(recipe, {}, status="error", error=cached_error)
+        else:
+            pending_recipes.append(recipe)
+            pending_indices.append(index)
+
+    if cached_errors:
+        _progress(f"Skipping {cached_errors}/{len(recipes)} recipes with cached component errors.")
+    if not pending_recipes:
+        return [row for row in rows_by_index if row is not None], cached_errors
 
     batch_predict = getattr(predictor, "predict_multicomponent_batch", None)
     if callable(batch_predict):
@@ -467,32 +497,34 @@ def predict_recipe_rows(predictor, recipes: Sequence[RecipeSpec]) -> Tuple[List[
             results = batch_predict(
                 [
                     (list(recipe.components), list(recipe.weights), recipe.architecture)
-                    for recipe in recipes
+                    for recipe in pending_recipes
                 ]
             )
-            if len(results) != len(recipes):
+            if len(results) != len(pending_recipes):
                 raise ValueError("Batch predictor returned a different number of results.")
-            return [
-                flatten_prediction_row(recipe, result, status="ok", error="")
-                for recipe, result in zip(recipes, results)
-            ], 0
+            for index, recipe, result in zip(pending_indices, pending_recipes, results):
+                rows_by_index[index] = flatten_prediction_row(recipe, result, status="ok", error="")
+            return [row for row in rows_by_index if row is not None], cached_errors
         except Exception as exc:
             _progress(
                 "Batch prediction failed for "
-                f"{len(recipes)} recipes; splitting fallback. "
+                f"{len(pending_recipes)} recipes; splitting fallback. "
                 f"{type(exc).__name__}: {exc}"
             )
-            if len(recipes) > 1:
-                midpoint = len(recipes) // 2
-                left_rows, left_errors = predict_recipe_rows(predictor, recipes[:midpoint])
-                right_rows, right_errors = predict_recipe_rows(predictor, recipes[midpoint:])
-                return left_rows + right_rows, left_errors + right_errors
+            if len(pending_recipes) > 1:
+                midpoint = len(pending_recipes) // 2
+                left_rows, left_errors = predict_recipe_rows(predictor, pending_recipes[:midpoint])
+                right_rows, right_errors = predict_recipe_rows(predictor, pending_recipes[midpoint:])
+                split_rows = left_rows + right_rows
+                for index, row in zip(pending_indices, split_rows):
+                    rows_by_index[index] = row
+                return [row for row in rows_by_index if row is not None], cached_errors + left_errors + right_errors
 
     rows: List[Dict[str, object]] = []
     errors = 0
-    for index, recipe in enumerate(recipes, start=1):
-        if len(recipes) > 1 and (index == 1 or index == len(recipes) or index % 10 == 0):
-            _progress(f"Row-wise fallback progress: {index}/{len(recipes)}")
+    for index, recipe in enumerate(pending_recipes, start=1):
+        if len(pending_recipes) > 1 and (index == 1 or index == len(pending_recipes) or index % 10 == 0):
+            _progress(f"Row-wise fallback progress: {index}/{len(pending_recipes)}")
         try:
             result = predictor.predict_multicomponent(
                 list(recipe.components),
@@ -504,7 +536,9 @@ def predict_recipe_rows(predictor, recipes: Sequence[RecipeSpec]) -> Tuple[List[
             errors += 1
             row = flatten_prediction_row(recipe, {}, status="error", error=str(exc))
         rows.append(row)
-    return rows, errors
+    for index, row in zip(pending_indices, rows):
+        rows_by_index[index] = row
+    return [row for row in rows_by_index if row is not None], cached_errors + errors
 
 
 def run_generation_job(

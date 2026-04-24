@@ -319,6 +319,7 @@ class BestTgPredictor:
         self._component_cache: Dict[str, Dict[str, np.ndarray | str]] = {}
         self._precomputed_component_lookup: Dict[str, Dict[str, np.ndarray | str]] = {}
         self._homopolymer_tg_cache: Dict[str, float] = {}
+        self._component_error_cache: Dict[str, str] = {}
         self._gnn_model = None
 
     def fit(self) -> None:
@@ -470,14 +471,22 @@ class BestTgPredictor:
         smi = _validate_repeat_unit_smiles(smiles)
         if smi in self._component_cache:
             return self._component_cache[smi]
+        cached_error = self._component_error_cache.get(smi)
+        if cached_error is not None:
+            raise ValueError(cached_error)
         precomputed = self._precomputed_component_lookup.get(smi)
         if precomputed is not None:
             self._component_cache[smi] = precomputed
             return precomputed
 
-        phyc, cp_source = self._compute_phyc_light(smi)
-        gnn = self._compute_gnn_embedding(smi)
-        pbert = self._compute_polybert_pca(smi)
+        try:
+            phyc, cp_source = self._compute_phyc_light(smi)
+            gnn = self._compute_gnn_embedding(smi)
+            pbert = self._compute_polybert_pca(smi)
+        except Exception as exc:
+            message = f"Component featurization failed for {smi}: {exc}"
+            self._component_error_cache[smi] = message
+            raise ValueError(message) from exc
 
         out = {
             "smiles": smi,
@@ -488,6 +497,10 @@ class BestTgPredictor:
         }
         self._component_cache[smi] = out
         return out
+
+    def get_component_error(self, smiles: str) -> Optional[str]:
+        smi = _validate_repeat_unit_smiles(smiles)
+        return self._component_error_cache.get(smi)
 
     def _component_full_vector(self, component: Dict[str, np.ndarray | str]) -> np.ndarray:
         return np.hstack([component["phyc"], component["gnn"], component["pbert"]]).astype(float)
