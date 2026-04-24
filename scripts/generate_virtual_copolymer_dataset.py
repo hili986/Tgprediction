@@ -39,7 +39,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", choices=["cuda", "cpu"], default="cuda")
     parser.add_argument("--architecture", choices=["random", "block", "both"], default="random")
 
-    parser.add_argument("--library", choices=["bicerano"], default="bicerano")
+    parser.add_argument(
+        "--auto-library",
+        "--library",
+        dest="auto_library",
+        choices=["bicerano", "unified"],
+        default="bicerano",
+        help="Auto recipe source library. Default: bicerano.",
+    )
     parser.add_argument("--min-components", type=int, default=2)
     parser.add_argument("--max-components", type=int, default=2)
     parser.add_argument(

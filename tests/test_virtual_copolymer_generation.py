@@ -3,14 +3,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pandas as pd
+
 from src.data.virtual_copolymer_generation import (
     RecipeSpec,
     append_result_rows,
     build_recipe_spec,
     canonicalize_recipe,
+    get_unified_auto_library,
     iter_auto_recipe_specs,
     load_completed_recipe_ids,
     load_csv_recipe_specs,
+    load_recipe_specs_from_args,
     make_recipe_id,
     merge_recipe_sources,
     parse_weight_grid,
@@ -232,6 +236,62 @@ class TestCsvAndHybridInputs(unittest.TestCase):
         ]
         merged = merge_recipe_sources(auto_recipes, csv_recipes)
         self.assertEqual(len(merged), 2)
+
+
+class TestAutoLibraries(unittest.TestCase):
+    def test_load_recipe_specs_defaults_to_bicerano(self):
+        class Args:
+            mode = "auto"
+            auto_library = "bicerano"
+            min_components = 2
+            max_components = 2
+            weight_grid = "0.5"
+            architecture = "random"
+            max_recipes = 1
+            random_seed = 42
+            data_path = "unused.parquet"
+
+        recipes = list(load_recipe_specs_from_args(Args()))
+        self.assertEqual(len(recipes), 1)
+
+    def test_unified_auto_library_requires_max_recipes(self):
+        class Args:
+            mode = "auto"
+            auto_library = "unified"
+            min_components = 2
+            max_components = 2
+            weight_grid = "0.5"
+            architecture = "random"
+            max_recipes = None
+            random_seed = 42
+            data_path = "data/unified_tg.parquet"
+
+        with self.assertRaisesRegex(ValueError, "--max-recipes"):
+            list(load_recipe_specs_from_args(Args()))
+
+    def test_unified_auto_library_deduplicates_smiles(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "unified.parquet"
+            pd.DataFrame({"smiles": ["*CC(*)", "*CO(*)", "*CC(*)"]}).to_parquet(path)
+
+            library = get_unified_auto_library(path)
+
+            self.assertEqual([row["smiles"] for row in library], ["*CC(*)", "*CO(*)"])
+
+    def test_legacy_library_alias_still_works(self):
+        class Args:
+            mode = "auto"
+            library = "bicerano"
+            min_components = 2
+            max_components = 2
+            weight_grid = "0.5"
+            architecture = "random"
+            max_recipes = 1
+            random_seed = 42
+            data_path = "unused.parquet"
+
+        recipes = list(load_recipe_specs_from_args(Args()))
+        self.assertEqual(len(recipes), 1)
 
 
 if __name__ == "__main__":

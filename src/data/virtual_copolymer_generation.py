@@ -9,6 +9,8 @@ from itertools import combinations, product
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
+import pandas as pd
+
 from src.data.bicerano_tg_dataset import BICERANO_DATA
 
 
@@ -190,6 +192,18 @@ def get_default_auto_library() -> List[Dict[str, str]]:
     return [{"name": name, "smiles": smiles} for name, smiles, _, _ in BICERANO_DATA]
 
 
+def get_unified_auto_library(data_path: Path) -> List[Dict[str, str]]:
+    df = pd.read_parquet(data_path, columns=["smiles"])
+    unique_smiles = sorted(
+        {
+            _validate_component_smiles(str(smiles).strip())
+            for smiles in df["smiles"]
+            if str(smiles).strip()
+        }
+    )
+    return [{"name": smiles, "smiles": smiles} for smiles in unique_smiles]
+
+
 def iter_auto_recipe_specs(
     library: Sequence[dict],
     min_components: int,
@@ -198,6 +212,7 @@ def iter_auto_recipe_specs(
     architectures: Sequence[str],
     max_recipes: Optional[int],
     random_seed: int,
+    library_source: str = "bicerano_auto",
 ) -> Iterator[RecipeSpec]:
     del random_seed
     min_components = max(int(min_components), 2)
@@ -241,7 +256,7 @@ def iter_auto_recipe_specs(
             for architecture in clean_architectures:
                 for weights in weight_sets:
                     metadata = {
-                        "source": "bicerano_auto",
+                        "source": library_source,
                         "component_names_serialized": serialize_components(component_names),
                     }
                     recipe = build_recipe_spec(
@@ -492,16 +507,25 @@ def load_recipe_specs_from_args(args) -> Iterable[RecipeSpec]:
     csv_recipes: List[RecipeSpec] = []
 
     if args.mode in {"auto", "hybrid"}:
-        if getattr(args, "library", "bicerano") != "bicerano":
-            raise ValueError("Only the 'bicerano' auto library is supported.")
+        auto_library = getattr(args, "auto_library", getattr(args, "library", "bicerano"))
+        if auto_library not in {"bicerano", "unified"}:
+            raise ValueError("auto library must be 'bicerano' or 'unified'.")
+        if auto_library == "unified" and args.max_recipes is None:
+            raise ValueError("--max-recipes is required when --auto-library unified is used.")
+        library = (
+            get_default_auto_library()
+            if auto_library == "bicerano"
+            else get_unified_auto_library(Path(args.data_path))
+        )
         auto_recipes = iter_auto_recipe_specs(
-            library=get_default_auto_library(),
+            library=library,
             min_components=args.min_components,
             max_components=args.max_components,
             weight_grid=parse_weight_grid(args.weight_grid),
             architectures=expand_architecture_choice(args.architecture),
             max_recipes=args.max_recipes,
             random_seed=args.random_seed,
+            library_source=f"{auto_library}_auto",
         )
 
     if args.mode in {"csv", "hybrid"}:

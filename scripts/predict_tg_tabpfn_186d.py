@@ -230,8 +230,11 @@ def _align_block(
     return mat
 
 
-def _load_training_blocks(paths: InferencePaths) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _load_training_blocks(
+    paths: InferencePaths,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     base_df = pd.read_parquet(paths.data_path)
+    smiles = base_df["smiles"].astype(str).to_numpy()
     y = base_df["tg_k"].to_numpy(dtype=float)
 
     all_phyc_names = get_feature_names("PHY-C")
@@ -261,7 +264,32 @@ def _load_training_blocks(paths: InferencePaths) -> Tuple[np.ndarray, np.ndarray
         )
     X_pbert = _align_block(base_df, df_pbert, pbert_cols, "polyBERT embeddings")
 
-    return X_phyc, X_gnn, X_pbert, y
+    return smiles, X_phyc, X_gnn, X_pbert, y
+
+
+def _build_precomputed_component_lookup(
+    smiles: Sequence[str],
+    x_phyc: np.ndarray,
+    x_gnn: np.ndarray,
+    x_pbert: np.ndarray,
+) -> Dict[str, Dict[str, np.ndarray | str]]:
+    lookup: Dict[str, Dict[str, np.ndarray | str]] = {}
+    for smi, phyc, gnn, pbert in zip(smiles, x_phyc, x_gnn, x_pbert):
+        if not (
+            np.isfinite(phyc).all()
+            and np.isfinite(gnn).all()
+            and np.isfinite(pbert).all()
+        ):
+            continue
+        key = str(smi)
+        lookup[key] = {
+            "smiles": key,
+            "phyc": np.asarray(phyc, dtype=float).copy(),
+            "gnn": np.asarray(gnn, dtype=float).copy(),
+            "pbert": np.asarray(pbert, dtype=float).copy(),
+            "chain_physics_source": "precomputed",
+        }
+    return lookup
 
 
 class BestTgPredictor:
@@ -289,6 +317,7 @@ class BestTgPredictor:
         self.chain_cache = load_chain_physics_cache(str(self.paths.chain_physics_cache))
 
         self._component_cache: Dict[str, Dict[str, np.ndarray | str]] = {}
+        self._precomputed_component_lookup: Dict[str, Dict[str, np.ndarray | str]] = {}
         self._gnn_model = None
 
     def fit(self) -> None:
@@ -296,7 +325,7 @@ class BestTgPredictor:
             return
 
         print("Loading training artifacts...")
-        X_phyc, X_gnn, X_pbert_raw, y = _load_training_blocks(self.paths)
+        smiles, X_phyc, X_gnn, X_pbert_raw, y = _load_training_blocks(self.paths)
 
         from sklearn.decomposition import PCA
         from tabpfn import TabPFNRegressor
@@ -311,6 +340,12 @@ class BestTgPredictor:
         self.pca.fit(X_pbert_raw[valid_pbert])
         X_pbert = np.full((len(X_pbert_raw), PBERT_PCA_DIM), np.nan)
         X_pbert[valid_pbert] = self.pca.transform(X_pbert_raw[valid_pbert])
+        self._precomputed_component_lookup = _build_precomputed_component_lookup(
+            smiles,
+            X_phyc,
+            X_gnn,
+            X_pbert,
+        )
 
         X_full = np.hstack([X_phyc, X_gnn, X_pbert])
         if X_full.shape[1] != FULL_DIM:
@@ -434,6 +469,10 @@ class BestTgPredictor:
         smi = _validate_repeat_unit_smiles(smiles)
         if smi in self._component_cache:
             return self._component_cache[smi]
+        precomputed = self._precomputed_component_lookup.get(smi)
+        if precomputed is not None:
+            self._component_cache[smi] = precomputed
+            return precomputed
 
         phyc, cp_source = self._compute_phyc_light(smi)
         gnn = self._compute_gnn_embedding(smi)
