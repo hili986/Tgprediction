@@ -126,6 +126,35 @@ class FakePredictor:
         }
 
 
+class FakeBatchPredictor(FakePredictor):
+    def __init__(self):
+        super().__init__()
+        self.batch_predict_calls = 0
+
+    def predict_multicomponent_batch(self, requests):
+        self.batch_predict_calls += 1
+        return [
+            {
+                "mode": "binary_copolymer" if len(smiles_list) == 2 else "multicomponent_copolymer",
+                "architecture": architecture,
+                "n_components": len(smiles_list),
+                "weights_normalized": list(weights),
+                "tg_k_pred": 350.0,
+                "tg_c_pred": 76.85,
+                "primary_method": "weighted_descriptor_embedding_mix",
+                "descriptor_mix_tg_k": 350.0,
+                "descriptor_mix_tg_c": 76.85,
+                "fox_reference_tg_k": 345.0,
+                "fox_reference_tg_c": 71.85,
+                "component_tg_window_k": [300.0, 400.0],
+                "component_tg_window_c": [26.85, 126.85],
+                "model": "fake",
+                "warning": "",
+            }
+            for smiles_list, weights, architecture in requests
+        ]
+
+
 class TestJobLoop(unittest.TestCase):
     def test_job_uses_one_predictor_fit_for_many_rows(self):
         predictor = FakePredictor()
@@ -186,6 +215,39 @@ class TestJobLoop(unittest.TestCase):
             self.assertEqual(stats["written"], 0)
             self.assertEqual(stats["skipped_existing"], 1)
             self.assertEqual(predictor.fit_calls, 0)
+
+    def test_job_uses_batch_predictor_once_per_chunk_when_available(self):
+        predictor = FakeBatchPredictor()
+        recipes = [
+            build_recipe_spec(
+                ("*CC(*)", "*CO(*)"),
+                (0.6, 0.4),
+                architecture="random",
+                input_origin="auto",
+                metadata={},
+            ),
+            build_recipe_spec(
+                ("*CC(*)", "*CN(*)"),
+                (0.6, 0.4),
+                architecture="random",
+                input_origin="auto",
+                metadata={},
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "virtual.csv"
+            stats = run_generation_job(
+                predictor=predictor,
+                recipes=recipes,
+                output_path=output,
+                output_format="csv",
+                chunk_size=2,
+                resume=False,
+            )
+            self.assertEqual(stats["written"], 2)
+            self.assertEqual(predictor.fit_calls, 1)
+            self.assertEqual(predictor.batch_predict_calls, 1)
+            self.assertEqual(predictor.predict_calls, 0)
 
 
 class TestCsvAndHybridInputs(unittest.TestCase):

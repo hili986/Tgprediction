@@ -451,6 +451,43 @@ def flatten_prediction_row(
     }
 
 
+def predict_recipe_rows(predictor, recipes: Sequence[RecipeSpec]) -> Tuple[List[Dict[str, object]], int]:
+    batch_predict = getattr(predictor, "predict_multicomponent_batch", None)
+    if callable(batch_predict):
+        try:
+            results = batch_predict(
+                [
+                    (list(recipe.components), list(recipe.weights), recipe.architecture)
+                    for recipe in recipes
+                ]
+            )
+            if len(results) != len(recipes):
+                raise ValueError("Batch predictor returned a different number of results.")
+            return [
+                flatten_prediction_row(recipe, result, status="ok", error="")
+                for recipe, result in zip(recipes, results)
+            ], 0
+        except Exception:
+            # Fall back to per-row prediction so one bad recipe does not lose a whole chunk.
+            pass
+
+    rows: List[Dict[str, object]] = []
+    errors = 0
+    for recipe in recipes:
+        try:
+            result = predictor.predict_multicomponent(
+                list(recipe.components),
+                list(recipe.weights),
+                architecture=recipe.architecture,
+            )
+            row = flatten_prediction_row(recipe, result, status="ok", error="")
+        except Exception as exc:
+            errors += 1
+            row = flatten_prediction_row(recipe, {}, status="error", error=str(exc))
+        rows.append(row)
+    return rows, errors
+
+
 def run_generation_job(
     predictor,
     recipes: Iterable[RecipeSpec],
@@ -464,7 +501,7 @@ def run_generation_job(
 
     seen_recipe_ids = load_completed_recipe_ids(output_path, output_format) if resume else set()
     fit_called = False
-    buffer: List[Dict[str, object]] = []
+    buffer: List[RecipeSpec] = []
     stats = {"written": 0, "errors": 0, "skipped_existing": 0}
 
     for recipe in recipes:
@@ -478,26 +515,19 @@ def run_generation_job(
             fit_called = True
 
         seen_recipe_ids.add(recipe_id)
-        try:
-            result = predictor.predict_multicomponent(
-                list(recipe.components),
-                list(recipe.weights),
-                architecture=recipe.architecture,
-            )
-            row = flatten_prediction_row(recipe, result, status="ok", error="")
-        except Exception as exc:
-            stats["errors"] += 1
-            row = flatten_prediction_row(recipe, {}, status="error", error=str(exc))
-
-        buffer.append(row)
+        buffer.append(recipe)
         if len(buffer) >= chunk_size:
-            append_result_rows(output_path, buffer, output_format)
-            stats["written"] += len(buffer)
+            rows, errors = predict_recipe_rows(predictor, buffer)
+            append_result_rows(output_path, rows, output_format)
+            stats["written"] += len(rows)
+            stats["errors"] += errors
             buffer.clear()
 
     if buffer:
-        append_result_rows(output_path, buffer, output_format)
-        stats["written"] += len(buffer)
+        rows, errors = predict_recipe_rows(predictor, buffer)
+        append_result_rows(output_path, rows, output_format)
+        stats["written"] += len(rows)
+        stats["errors"] += errors
 
     return stats
 

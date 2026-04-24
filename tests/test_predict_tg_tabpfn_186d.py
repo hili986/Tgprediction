@@ -51,6 +51,66 @@ class TestPrecomputedLookup(unittest.TestCase):
         self.assertEqual(result["chain_physics_source"], "precomputed")
         self.assertIn("*CC(*)", predictor._component_cache)
 
+    def test_component_homopolymer_prediction_is_cached(self):
+        predictor = BestTgPredictor.__new__(BestTgPredictor)
+        predictor._homopolymer_tg_cache = {}
+        calls = []
+
+        def _fake_predict(matrix):
+            calls.append(np.asarray(matrix).shape)
+            return np.array([321.0])
+
+        predictor._predict_from_full_matrix = _fake_predict
+        component = {
+            "smiles": "*CC(*)",
+            "phyc": np.ones(PHY_C_LIGHT_DIM),
+            "gnn": np.ones(GNN_DIM),
+            "pbert": np.ones(PBERT_PCA_DIM),
+            "chain_physics_source": "precomputed",
+        }
+
+        self.assertEqual(predictor._predict_component_homopolymer_k(component), 321.0)
+        self.assertEqual(predictor._predict_component_homopolymer_k(component), 321.0)
+        self.assertEqual(len(calls), 1)
+
+    def test_multicomponent_batch_predicts_descriptor_rows_together(self):
+        predictor = BestTgPredictor.__new__(BestTgPredictor)
+        predictor._component_cache = {}
+        predictor._homopolymer_tg_cache = {}
+        predictor._precomputed_component_lookup = {
+            smiles: {
+                "smiles": smiles,
+                "phyc": np.ones(PHY_C_LIGHT_DIM) * idx,
+                "gnn": np.ones(GNN_DIM) * idx,
+                "pbert": np.ones(PBERT_PCA_DIM) * idx,
+                "chain_physics_source": "precomputed",
+            }
+            for idx, smiles in enumerate(["*CC(*)", "*CO(*)", "*CN(*)"], start=1)
+        }
+        calls = []
+
+        def _fake_predict(matrix):
+            n_rows = np.asarray(matrix).shape[0]
+            calls.append(n_rows)
+            if len(calls) == 1:
+                return np.arange(n_rows, dtype=float) + 300.0
+            return np.arange(n_rows, dtype=float) + 350.0
+
+        predictor._predict_from_full_matrix = _fake_predict
+
+        results = predictor.predict_multicomponent_batch(
+            [
+                (["*CC(*)", "*CO(*)"], [0.5, 0.5], "random"),
+                (["*CC(*)", "*CN(*)"], [0.5, 0.5], "random"),
+            ]
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(calls, [3, 2])
+        self.assertEqual(set(predictor._homopolymer_tg_cache), {"*CC(*)", "*CO(*)", "*CN(*)"})
+        self.assertEqual(results[0]["tg_k_pred"], 350.0)
+        self.assertEqual(results[1]["tg_k_pred"], 351.0)
+
 
 if __name__ == "__main__":
     unittest.main()

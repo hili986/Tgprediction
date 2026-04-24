@@ -318,6 +318,7 @@ class BestTgPredictor:
 
         self._component_cache: Dict[str, Dict[str, np.ndarray | str]] = {}
         self._precomputed_component_lookup: Dict[str, Dict[str, np.ndarray | str]] = {}
+        self._homopolymer_tg_cache: Dict[str, float] = {}
         self._gnn_model = None
 
     def fit(self) -> None:
@@ -488,23 +489,42 @@ class BestTgPredictor:
         self._component_cache[smi] = out
         return out
 
-    def _predict_from_full_vector(self, x_full: np.ndarray) -> float:
+    def _component_full_vector(self, component: Dict[str, np.ndarray | str]) -> np.ndarray:
+        return np.hstack([component["phyc"], component["gnn"], component["pbert"]]).astype(float)
+
+    def _predict_from_full_matrix(self, x_full: np.ndarray) -> np.ndarray:
         if self.model is None or self.preprocess is None or self.pca is None:
             self.fit()
 
-        x_full = np.asarray(x_full, dtype=float).reshape(1, -1)
-        if x_full.shape[1] != FULL_DIM:
-            raise ValueError(f"Expected {FULL_DIM} features, got {x_full.shape[1]}.")
+        x_full = np.asarray(x_full, dtype=float)
+        if x_full.ndim == 1:
+            x_full = x_full.reshape(1, -1)
+        if x_full.ndim != 2 or x_full.shape[1] != FULL_DIM:
+            got = x_full.shape[1] if x_full.ndim == 2 else x_full.shape
+            raise ValueError(f"Expected {FULL_DIM} features, got {got}.")
         if not np.isfinite(x_full).all():
             raise ValueError("Query feature vector contains NaN/inf.")
 
         x_pp = self.preprocess.transform(x_full)
-        pred = float(self.model.predict(x_pp)[0])
-        return pred
+        return np.asarray(self.model.predict(x_pp), dtype=float)
+
+    def _predict_from_full_vector(self, x_full: np.ndarray) -> float:
+        return float(self._predict_from_full_matrix(x_full)[0])
 
     def _predict_component_homopolymer_k(self, component: Dict[str, np.ndarray | str]) -> float:
-        x_full = np.hstack([component["phyc"], component["gnn"], component["pbert"]])
-        return self._predict_from_full_vector(x_full)
+        cache = getattr(self, "_homopolymer_tg_cache", None)
+        if cache is None:
+            self._homopolymer_tg_cache = {}
+            cache = self._homopolymer_tg_cache
+
+        smiles = str(component.get("smiles", ""))
+        if smiles and smiles in cache:
+            return cache[smiles]
+
+        tg_k = self._predict_from_full_vector(self._component_full_vector(component))
+        if smiles:
+            cache[smiles] = tg_k
+        return tg_k
 
     def predict_homopolymer(self, smiles: str) -> Dict[str, object]:
         comp = self.featurize_component(smiles)
@@ -554,8 +574,25 @@ class BestTgPredictor:
             axis=0,
         )
         descriptor_mix_tg_k = self._predict_from_full_vector(np.hstack([phyc_mix, gnn_mix, pbert_mix]))
-
         component_tg_k = [self._predict_component_homopolymer_k(comp) for comp in components]
+        return self._format_multicomponent_result(
+            clean_smiles,
+            norm_weights,
+            architecture,
+            components,
+            descriptor_mix_tg_k,
+            component_tg_k,
+        )
+
+    def _format_multicomponent_result(
+        self,
+        clean_smiles: Sequence[str],
+        norm_weights: Sequence[float],
+        architecture: str,
+        components: Sequence[Dict[str, np.ndarray | str]],
+        descriptor_mix_tg_k: float,
+        component_tg_k: Sequence[float],
+    ) -> Dict[str, object]:
         fox_tg_k = _fox_blend_tg(component_tg_k, norm_weights)
 
         primary_tg_k = descriptor_mix_tg_k
@@ -617,6 +654,81 @@ class BestTgPredictor:
             result["chain_physics_source_2"] = components[1]["chain_physics_source"]
 
         return result
+
+    def predict_multicomponent_batch(
+        self,
+        requests: Sequence[Tuple[Sequence[str], Sequence[float], str]],
+    ) -> List[Dict[str, object]]:
+        prepared = []
+        mix_vectors = []
+        pending_homopolymer_vectors: Dict[str, np.ndarray] = {}
+
+        cache = getattr(self, "_homopolymer_tg_cache", None)
+        if cache is None:
+            self._homopolymer_tg_cache = {}
+            cache = self._homopolymer_tg_cache
+
+        for smiles_list, weights, architecture in requests:
+            if architecture not in SUPPORTED_ARCHITECTURES:
+                raise ValueError(
+                    f"Unsupported architecture '{architecture}'. Expected one of: "
+                    f"{sorted(SUPPORTED_ARCHITECTURES)}."
+                )
+
+            clean_smiles = [_validate_repeat_unit_smiles(s) for s in smiles_list]
+            norm_weights = _normalize_weights(weights)
+            if len(clean_smiles) != len(norm_weights):
+                raise ValueError("Number of SMILES and weights must match.")
+            if len(clean_smiles) == 1:
+                raise ValueError("Batch copolymer prediction requires at least two components.")
+
+            components = [self.featurize_component(smi) for smi in clean_smiles]
+            phyc_mix = np.sum(
+                [w * np.asarray(comp["phyc"], dtype=float) for w, comp in zip(norm_weights, components)],
+                axis=0,
+            )
+            gnn_mix = np.sum(
+                [w * np.asarray(comp["gnn"], dtype=float) for w, comp in zip(norm_weights, components)],
+                axis=0,
+            )
+            pbert_mix = np.sum(
+                [w * np.asarray(comp["pbert"], dtype=float) for w, comp in zip(norm_weights, components)],
+                axis=0,
+            )
+            mix_vectors.append(np.hstack([phyc_mix, gnn_mix, pbert_mix]))
+
+            for comp in components:
+                smiles = str(comp.get("smiles", ""))
+                if smiles and smiles not in cache and smiles not in pending_homopolymer_vectors:
+                    pending_homopolymer_vectors[smiles] = self._component_full_vector(comp)
+
+            prepared.append((clean_smiles, norm_weights, architecture, components))
+
+        if pending_homopolymer_vectors:
+            homopolymer_preds = self._predict_from_full_matrix(
+                np.vstack(list(pending_homopolymer_vectors.values()))
+            )
+            for smiles, tg_k in zip(pending_homopolymer_vectors, homopolymer_preds):
+                cache[smiles] = float(tg_k)
+
+        descriptor_mix_preds = self._predict_from_full_matrix(np.vstack(mix_vectors))
+        results = []
+        for (clean_smiles, norm_weights, architecture, components), descriptor_mix_tg_k in zip(
+            prepared,
+            descriptor_mix_preds,
+        ):
+            component_tg_k = [self._predict_component_homopolymer_k(comp) for comp in components]
+            results.append(
+                self._format_multicomponent_result(
+                    clean_smiles,
+                    norm_weights,
+                    architecture,
+                    components,
+                    float(descriptor_mix_tg_k),
+                    component_tg_k,
+                )
+            )
+        return results
 
     def predict_binary(self, smiles1: str, smiles2: str, w1: float) -> Dict[str, object]:
         if not (0.0 <= w1 <= 1.0):
