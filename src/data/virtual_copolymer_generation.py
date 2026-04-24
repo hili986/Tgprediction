@@ -5,6 +5,7 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from itertools import combinations, product
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
@@ -451,7 +452,15 @@ def flatten_prediction_row(
     }
 
 
+def _progress(message: str) -> None:
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{stamp}] {message}", flush=True)
+
+
 def predict_recipe_rows(predictor, recipes: Sequence[RecipeSpec]) -> Tuple[List[Dict[str, object]], int]:
+    if not recipes:
+        return [], 0
+
     batch_predict = getattr(predictor, "predict_multicomponent_batch", None)
     if callable(batch_predict):
         try:
@@ -467,13 +476,23 @@ def predict_recipe_rows(predictor, recipes: Sequence[RecipeSpec]) -> Tuple[List[
                 flatten_prediction_row(recipe, result, status="ok", error="")
                 for recipe, result in zip(recipes, results)
             ], 0
-        except Exception:
-            # Fall back to per-row prediction so one bad recipe does not lose a whole chunk.
-            pass
+        except Exception as exc:
+            _progress(
+                "Batch prediction failed for "
+                f"{len(recipes)} recipes; splitting fallback. "
+                f"{type(exc).__name__}: {exc}"
+            )
+            if len(recipes) > 1:
+                midpoint = len(recipes) // 2
+                left_rows, left_errors = predict_recipe_rows(predictor, recipes[:midpoint])
+                right_rows, right_errors = predict_recipe_rows(predictor, recipes[midpoint:])
+                return left_rows + right_rows, left_errors + right_errors
 
     rows: List[Dict[str, object]] = []
     errors = 0
-    for recipe in recipes:
+    for index, recipe in enumerate(recipes, start=1):
+        if len(recipes) > 1 and (index == 1 or index == len(recipes) or index % 10 == 0):
+            _progress(f"Row-wise fallback progress: {index}/{len(recipes)}")
         try:
             result = predictor.predict_multicomponent(
                 list(recipe.components),
@@ -503,6 +522,8 @@ def run_generation_job(
     fit_called = False
     buffer: List[RecipeSpec] = []
     stats = {"written": 0, "errors": 0, "skipped_existing": 0}
+    if seen_recipe_ids:
+        _progress(f"Resume enabled: loaded {len(seen_recipe_ids)} completed recipe ids.")
 
     for recipe in recipes:
         recipe_id = make_recipe_id(recipe)
@@ -517,17 +538,35 @@ def run_generation_job(
         seen_recipe_ids.add(recipe_id)
         buffer.append(recipe)
         if len(buffer) >= chunk_size:
+            _progress(
+                "Predicting chunk: "
+                f"size={len(buffer)}, first={make_recipe_id(buffer[0])}, last={make_recipe_id(buffer[-1])}"
+            )
             rows, errors = predict_recipe_rows(predictor, buffer)
             append_result_rows(output_path, rows, output_format)
             stats["written"] += len(rows)
             stats["errors"] += errors
+            _progress(
+                "Wrote chunk: "
+                f"rows={len(rows)}, total_written={stats['written']}, "
+                f"errors={stats['errors']}, skipped_existing={stats['skipped_existing']}"
+            )
             buffer.clear()
 
     if buffer:
+        _progress(
+            "Predicting final chunk: "
+            f"size={len(buffer)}, first={make_recipe_id(buffer[0])}, last={make_recipe_id(buffer[-1])}"
+        )
         rows, errors = predict_recipe_rows(predictor, buffer)
         append_result_rows(output_path, rows, output_format)
         stats["written"] += len(rows)
         stats["errors"] += errors
+        _progress(
+            "Wrote final chunk: "
+            f"rows={len(rows)}, total_written={stats['written']}, "
+            f"errors={stats['errors']}, skipped_existing={stats['skipped_existing']}"
+        )
 
     return stats
 
