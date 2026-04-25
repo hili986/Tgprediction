@@ -84,6 +84,11 @@ SUPPORTED_ARCHITECTURES = {"random", "block"}
 COMPONENT_COL_RE = re.compile(r"^(?:smiles|component)_?(\d+)$", re.IGNORECASE)
 WEIGHT_COL_RE = re.compile(r"^(?:w|weight)_?(\d+)$", re.IGNORECASE)
 
+try:
+    from rdkit import Chem
+except ImportError:  # pragma: no cover - rdkit is a project dependency, but keep import-time fallback.
+    Chem = None
+
 
 @dataclass
 class InferencePaths:
@@ -109,6 +114,20 @@ def _validate_repeat_unit_smiles(smiles: str) -> str:
             f"SMILES '{smi}' does not look like a repeat-unit SMILES with two attachment points."
         )
     return smi
+
+
+def _canonical_repeat_unit_key(smiles: str) -> Optional[str]:
+    if Chem is None:
+        return None
+    try:
+        smi = _validate_repeat_unit_smiles(smiles)
+    except ValueError:
+        return None
+    normalized = re.sub(r"(?<!\[)\*(?!\])", "[*]", smi)
+    mol = Chem.MolFromSmiles(normalized)
+    if mol is None:
+        return None
+    return Chem.MolToSmiles(mol)
 
 
 def _normalize_weights(weights: Sequence[float]) -> np.ndarray:
@@ -292,6 +311,31 @@ def _build_precomputed_component_lookup(
     return lookup
 
 
+def _copy_precomputed_component(
+    component: Dict[str, np.ndarray | str],
+    chain_physics_source: str,
+) -> Dict[str, np.ndarray | str]:
+    return {
+        "smiles": str(component["smiles"]),
+        "phyc": np.asarray(component["phyc"], dtype=float).copy(),
+        "gnn": np.asarray(component["gnn"], dtype=float).copy(),
+        "pbert": np.asarray(component["pbert"], dtype=float).copy(),
+        "chain_physics_source": chain_physics_source,
+    }
+
+
+def _build_canonical_component_lookup(
+    precomputed_lookup: Dict[str, Dict[str, np.ndarray | str]],
+) -> Dict[str, Dict[str, np.ndarray | str]]:
+    lookup: Dict[str, Dict[str, np.ndarray | str]] = {}
+    for smiles, component in precomputed_lookup.items():
+        key = _canonical_repeat_unit_key(smiles)
+        if key is None or key in lookup:
+            continue
+        lookup[key] = _copy_precomputed_component(component, "precomputed_canonical")
+    return lookup
+
+
 class BestTgPredictor:
     def __init__(
         self,
@@ -318,6 +362,7 @@ class BestTgPredictor:
 
         self._component_cache: Dict[str, Dict[str, np.ndarray | str]] = {}
         self._precomputed_component_lookup: Dict[str, Dict[str, np.ndarray | str]] = {}
+        self._canonical_component_lookup: Dict[str, Dict[str, np.ndarray | str]] = {}
         self._homopolymer_tg_cache: Dict[str, float] = {}
         self._component_error_cache: Dict[str, str] = {}
         self._gnn_model = None
@@ -347,6 +392,9 @@ class BestTgPredictor:
             X_phyc,
             X_gnn,
             X_pbert,
+        )
+        self._canonical_component_lookup = _build_canonical_component_lookup(
+            self._precomputed_component_lookup
         )
 
         X_full = np.hstack([X_phyc, X_gnn, X_pbert])
@@ -478,6 +526,15 @@ class BestTgPredictor:
         if precomputed is not None:
             self._component_cache[smi] = precomputed
             return precomputed
+        canonical_key = _canonical_repeat_unit_key(smi)
+        canonical_precomputed = (
+            self._canonical_component_lookup.get(canonical_key)
+            if canonical_key is not None
+            else None
+        )
+        if canonical_precomputed is not None:
+            self._component_cache[smi] = canonical_precomputed
+            return canonical_precomputed
 
         try:
             phyc, cp_source = self._compute_phyc_light(smi)

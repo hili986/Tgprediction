@@ -7,11 +7,15 @@ from scripts.predict_tg_tabpfn_186d import (
     GNN_DIM,
     PBERT_PCA_DIM,
     PHY_C_LIGHT_DIM,
+    _canonical_repeat_unit_key,
     _build_precomputed_component_lookup,
 )
 
 
 class TestPrecomputedLookup(unittest.TestCase):
+    def test_canonical_repeat_unit_key_returns_none_for_non_repeat_unit(self):
+        self.assertIsNone(_canonical_repeat_unit_key("CCO"))
+
     def test_build_lookup_keeps_only_finite_rows(self):
         smiles = np.array(["*CC(*)", "*CO(*)"])
         x_phyc = np.vstack([np.ones(PHY_C_LIGHT_DIM), np.full(PHY_C_LIGHT_DIM, np.nan)])
@@ -30,6 +34,7 @@ class TestPrecomputedLookup(unittest.TestCase):
         predictor = BestTgPredictor.__new__(BestTgPredictor)
         predictor._component_cache = {}
         predictor._component_error_cache = {}
+        predictor._canonical_component_lookup = {}
         predictor._precomputed_component_lookup = {
             "*CC(*)": {
                 "smiles": "*CC(*)",
@@ -51,6 +56,33 @@ class TestPrecomputedLookup(unittest.TestCase):
 
         self.assertEqual(result["chain_physics_source"], "precomputed")
         self.assertIn("*CC(*)", predictor._component_cache)
+
+    def test_featurize_component_uses_canonical_precomputed_lookup(self):
+        predictor = BestTgPredictor.__new__(BestTgPredictor)
+        predictor._component_cache = {}
+        predictor._component_error_cache = {}
+        predictor._precomputed_component_lookup = {}
+        predictor._canonical_component_lookup = {
+            "*CC(*)C#N": {
+                "smiles": "*CC(*)C#N",
+                "phyc": np.ones(PHY_C_LIGHT_DIM),
+                "gnn": np.ones(GNN_DIM),
+                "pbert": np.ones(PBERT_PCA_DIM),
+                "chain_physics_source": "precomputed_canonical",
+            }
+        }
+
+        def _boom(*args, **kwargs):
+            raise AssertionError("should not recompute")
+
+        predictor._compute_phyc_light = _boom
+        predictor._compute_gnn_embedding = _boom
+        predictor._compute_polybert_pca = _boom
+
+        result = predictor.featurize_component("*C(C#N)C*")
+
+        self.assertEqual(result["smiles"], "*CC(*)C#N")
+        self.assertEqual(result["chain_physics_source"], "precomputed_canonical")
 
     def test_component_homopolymer_prediction_is_cached(self):
         predictor = BestTgPredictor.__new__(BestTgPredictor)
@@ -79,6 +111,7 @@ class TestPrecomputedLookup(unittest.TestCase):
         predictor._component_cache = {}
         predictor._homopolymer_tg_cache = {}
         predictor._component_error_cache = {}
+        predictor._canonical_component_lookup = {}
         predictor._precomputed_component_lookup = {
             smiles: {
                 "smiles": smiles,
@@ -118,6 +151,7 @@ class TestPrecomputedLookup(unittest.TestCase):
         predictor._component_cache = {}
         predictor._component_error_cache = {}
         predictor._precomputed_component_lookup = {}
+        predictor._canonical_component_lookup = {}
         calls = []
 
         def _fail(smiles):
