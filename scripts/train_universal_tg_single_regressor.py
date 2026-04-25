@@ -225,6 +225,30 @@ def choose_model(name: str, random_state: int = 42):
             homo_correction_lambda=0.5,
             homo_correction_landmarks=900,
         )
+    if key == "physics_additive_kernel":
+        return PhysicsResidualKernelRegressor(
+            n_landmarks=700,
+            prior_lambda=0.5,
+            residual_lambda=2.0,
+            random_state=random_state,
+            additive_kernel_groups=(
+                (
+                    "endpoint_tg_",
+                    "endpoint_missing",
+                    "w_",
+                    "n_components",
+                    "is_homopolymer",
+                    "is_random",
+                    "is_block",
+                    "is_multicomponent",
+                ),
+                (
+                    "emb_mean_",
+                    "emb_std_",
+                    "emb_contrast_",
+                ),
+            ),
+        )
     if key == "histgradient":
         return HistGradientBoostingRegressor(
             max_iter=800,
@@ -726,7 +750,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--build-table", action="store_true", help="Build unified feature table before training.")
     parser.add_argument("--table", default="results/universal_single_regressor/unified_training_table.parquet")
     parser.add_argument("--output-dir", default="results/universal_single_regressor/exp_default")
-    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient", "xgboost", "lightgbm", "physics_kernel", "physics_multikernel", "physics_local", "physics_local_light", "physics_hybrid_balanced", "physics_homo_correction"])
+    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient", "xgboost", "lightgbm", "physics_kernel", "physics_multikernel", "physics_local", "physics_local_light", "physics_hybrid_balanced", "physics_homo_correction", "physics_additive_kernel"])
     parser.add_argument("--feature-layer", default="M2M-V")
     parser.add_argument("--morgan-bits", type=int, default=256)
     parser.add_argument("--test-size", type=float, default=0.2)

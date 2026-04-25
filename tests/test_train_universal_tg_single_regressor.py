@@ -87,6 +87,11 @@ class TestTrainUniversalSingleRegressor(unittest.TestCase):
         self.assertTrue(model.homo_correction)
         self.assertAlmostEqual(model.high_dim_kernel_weight, 0.0)
 
+    def test_choose_model_returns_custom_physics_additive_kernel(self):
+        model = choose_model("physics_additive_kernel", random_state=7)
+        self.assertEqual(model.__class__.__name__, "PhysicsResidualKernelRegressor")
+        self.assertEqual(len(model.additive_kernel_groups), 2)
+
     def test_normalise_limit_distinguishes_disable_from_unlimited(self):
         self.assertIsNone(_normalise_limit(-1))
         self.assertEqual(_normalise_limit(0), 0)

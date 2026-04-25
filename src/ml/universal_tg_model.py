@@ -51,6 +51,7 @@ class PhysicsResidualKernelRegressor:
         homo_correction: bool = False,
         homo_correction_lambda: float = 1.0,
         homo_correction_landmarks: int = 800,
+        additive_kernel_groups: Optional[Sequence[Sequence[str]]] = None,
     ) -> None:
         self.n_landmarks = int(n_landmarks)
         self.gamma = gamma
@@ -68,6 +69,7 @@ class PhysicsResidualKernelRegressor:
         self.homo_correction = bool(homo_correction)
         self.homo_correction_lambda = float(homo_correction_lambda)
         self.homo_correction_landmarks = int(homo_correction_landmarks)
+        self.additive_kernel_groups = [tuple(group) for group in (additive_kernel_groups or [])]
         self.prior_column_patterns = list(
             prior_column_patterns
             or [
@@ -110,6 +112,7 @@ class PhysicsResidualKernelRegressor:
         landmark_idx = self._select_landmarks(x_kernel, weights)
         self.landmarks_ = x_kernel[landmark_idx].copy()
         self.gamma_ = float(self.gamma) if self.gamma is not None else self._median_gamma(self.landmarks_)
+        self._fit_additive_groups(x_kernel, landmark_idx, feature_names)
         phi = self._rbf_features(x_kernel)
         kernel_residual = residual
         self.residual_coef_ = self._weighted_ridge(phi, kernel_residual, weights, self.residual_lambda)
@@ -343,6 +346,16 @@ class PhysicsResidualKernelRegressor:
     def _rbf_features(self, x_scaled: np.ndarray) -> np.ndarray:
         d2 = self._squared_distances(x_scaled, self.landmarks_)
         blocks = [np.exp(-(self.gamma_ * scale) * d2) for scale in self.kernel_scales]
+        if getattr(self, "additive_group_indices_", None):
+            for indices, landmarks, gamma in zip(
+                self.additive_group_indices_,
+                self.additive_group_landmarks_,
+                self.additive_group_gammas_,
+            ):
+                if len(indices) == 0:
+                    continue
+                group_d2 = self._squared_distances(x_scaled[:, indices], landmarks)
+                blocks.append(np.exp(-gamma * group_d2))
         return blocks[0] if len(blocks) == 1 else np.hstack(blocks)
 
     def _squared_distances(self, left: np.ndarray, right: np.ndarray) -> np.ndarray:
@@ -350,6 +363,29 @@ class PhysicsResidualKernelRegressor:
         right_norm = np.sum(right * right, axis=1, keepdims=True).T
         d2 = left_norm + right_norm - 2.0 * (left @ right.T)
         return np.maximum(d2, 0.0)
+
+    def _fit_additive_groups(
+        self,
+        x_kernel: np.ndarray,
+        landmark_idx: np.ndarray,
+        feature_names: Sequence[str],
+    ) -> None:
+        self.additive_group_indices_ = []
+        self.additive_group_landmarks_ = []
+        self.additive_group_gammas_ = []
+        for patterns in self.additive_kernel_groups:
+            indices = [
+                idx
+                for idx, name in enumerate(feature_names)
+                if any(str(name).startswith(pattern) or pattern in str(name) for pattern in patterns)
+            ]
+            unique = np.asarray(sorted(set(indices)), dtype=int)
+            if unique.size == 0:
+                continue
+            landmarks = x_kernel[landmark_idx][:, unique].copy()
+            self.additive_group_indices_.append(unique)
+            self.additive_group_landmarks_.append(landmarks)
+            self.additive_group_gammas_.append(self._median_gamma(landmarks))
 
     def _local_residual(self, x_scaled: np.ndarray) -> np.ndarray:
         k = min(max(1, self.local_k), self.train_kernel_.shape[0])
