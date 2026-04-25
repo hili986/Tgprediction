@@ -111,6 +111,40 @@ def choose_model(name: str, random_state: int = 42):
             l2_regularization=0.02,
             random_state=random_state,
         )
+    if key == "xgboost":
+        try:
+            from xgboost import XGBRegressor
+
+            return XGBRegressor(
+                n_estimators=1200,
+                max_depth=5,
+                learning_rate=0.025,
+                subsample=0.85,
+                colsample_bytree=0.85,
+                reg_lambda=2.0,
+                objective="reg:squarederror",
+                n_jobs=-1,
+                random_state=random_state,
+            )
+        except Exception:
+            key = "extratrees"
+    if key == "lightgbm":
+        try:
+            from lightgbm import LGBMRegressor
+
+            return LGBMRegressor(
+                n_estimators=1400,
+                num_leaves=31,
+                learning_rate=0.025,
+                subsample=0.85,
+                colsample_bytree=0.85,
+                reg_lambda=2.0,
+                random_state=random_state,
+                n_jobs=-1,
+                verbose=-1,
+            )
+        except Exception:
+            key = "extratrees"
     if key == "extratrees":
         return ExtraTreesRegressor(
             n_estimators=600,
@@ -457,6 +491,56 @@ def evaluate_holdout(frame: pd.DataFrame, feature_columns: list[str], args: argp
     return estimator, summary, details
 
 
+def evaluate_group_holdout(
+    frame: pd.DataFrame,
+    feature_columns: list[str],
+    args: argparse.Namespace,
+    source_name: str,
+) -> tuple[dict[str, dict[str, float]], pd.DataFrame]:
+    if "split_group" not in frame.columns:
+        return {}, pd.DataFrame()
+    subset = frame[
+        frame["source"].astype(str).eq(source_name)
+        & frame["split_group"].notna()
+        & frame["split_group"].astype(str).ne("")
+    ].copy()
+    groups = sorted(subset["split_group"].astype(str).unique())
+    if len(groups) < 2:
+        return {}, pd.DataFrame()
+    if args.max_group_eval_folds > 0:
+        groups = groups[: args.max_group_eval_folds]
+
+    details: list[pd.DataFrame] = []
+    for group in groups:
+        test_index = subset.index[subset["split_group"].astype(str).eq(group)]
+        train = frame.drop(index=test_index)
+        test = frame.loc[test_index]
+        if train.empty or test.empty:
+            continue
+        estimator = make_estimator(args.model, args.random_state)
+        weights = make_sample_weights(
+            train,
+            args.homopolymer_weight,
+            args.virtual_weight,
+            args.copolymer_weight,
+            args.nucleobase_weight,
+        )
+        _fit_with_optional_weights(estimator, train[feature_columns], train["target_tg_c"], weights)
+        fold = test[["sample_id", "source", "architecture", "split_group", "target_tg_c"]].copy()
+        fold["pred_tg_c"] = estimator.predict(test[feature_columns])
+        fold["split"] = f"group_holdout:{source_name}"
+        fold["heldout_group"] = group
+        details.append(fold)
+
+    if not details:
+        return {}, pd.DataFrame()
+    all_details = pd.concat(details, ignore_index=True)
+    metric_name = f"group_holdout_{source_name}"
+    return {
+        metric_name: compute_metrics(all_details["target_tg_c"], all_details["pred_tg_c"])
+    }, all_details
+
+
 def train_final_model(frame: pd.DataFrame, feature_columns: list[str], args: argparse.Namespace) -> Pipeline:
     estimator = make_estimator(args.model, args.random_state)
     weights = make_sample_weights(
@@ -499,7 +583,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--build-table", action="store_true", help="Build unified feature table before training.")
     parser.add_argument("--table", default="results/universal_single_regressor/unified_training_table.parquet")
     parser.add_argument("--output-dir", default="results/universal_single_regressor/exp_default")
-    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient"])
+    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient", "xgboost", "lightgbm"])
     parser.add_argument("--feature-layer", default="M2M-V")
     parser.add_argument("--morgan-bits", type=int, default=256)
     parser.add_argument("--test-size", type=float, default=0.2)
@@ -516,6 +600,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-polyinfo", type=int, default=-1)
     parser.add_argument("--max-nucleobase", type=int, default=-1)
     parser.add_argument("--max-virtual", type=int, default=20000)
+    parser.add_argument("--group-eval", action="store_true", help="Run expensive source-specific group holdout evaluation.")
+    parser.add_argument("--max-group-eval-folds", type=int, default=20)
     return parser
 
 
@@ -553,6 +639,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         raise ValueError("No numeric feature columns found.")
 
     holdout_model, metrics, predictions = evaluate_holdout(table, feature_columns, args)
+    prediction_frames = [predictions]
+    if args.group_eval:
+        for source_name in ["polyinfo_real", "nucleobase_real"]:
+            group_metrics, group_predictions = evaluate_group_holdout(
+                table,
+                feature_columns,
+                args,
+                source_name,
+            )
+            metrics.update(group_metrics)
+            if not group_predictions.empty:
+                prediction_frames.append(group_predictions)
     final_model = train_final_model(table, feature_columns, args)
 
     summary = {
@@ -578,7 +676,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     joblib.dump(holdout_model, out_dir / "holdout_model.joblib")
     (out_dir / "feature_columns.json").write_text(json.dumps(feature_columns, indent=2), encoding="utf-8")
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    predictions.to_csv(out_dir / "predictions_by_split.csv", index=False)
+    pd.concat(prediction_frames, ignore_index=True, sort=False).to_csv(
+        out_dir / "predictions_by_split.csv",
+        index=False,
+    )
     _write_experiment_log(out_dir / "experiment_log.md", summary)
     print(json.dumps(summary["metrics"], indent=2))
     return 0
