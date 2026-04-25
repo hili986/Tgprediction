@@ -67,6 +67,24 @@ class TestPhysicsResidualKernelRegressor(unittest.TestCase):
         self.assertEqual(pred.shape, (12,))
         self.assertTrue(np.isfinite(pred).all())
 
+    def test_local_residual_correction_predicts(self):
+        frame = pd.DataFrame(
+            {
+                "endpoint_tg_fox_c": np.linspace(0.0, 10.0, 20),
+                "emb_mean_000": np.linspace(-2.0, 2.0, 20),
+            }
+        )
+        y = np.where(frame["emb_mean_000"].to_numpy() < 0, -5.0, 5.0)
+        model = PhysicsResidualKernelRegressor(
+            n_landmarks=10,
+            local_k=4,
+            local_weight=0.8,
+            random_state=4,
+        )
+        model.fit(frame, y)
+        pred = model.predict(frame)
+        self.assertLess(float(np.mean(np.abs(pred - y))), 2.5)
+
 
 if __name__ == "__main__":
     unittest.main()
