@@ -11,6 +11,7 @@ from scripts.train_universal_tg_single_regressor import (
     build_table_from_records,
     choose_model,
     compute_metrics,
+    mask_hybrid186_for_nonhomopolymer,
     make_sample_weights,
 )
 from src.ml.universal_tg_features import ComponentRecord, PolymerRecord
@@ -129,6 +130,21 @@ class TestTrainUniversalSingleRegressor(unittest.TestCase):
         self.assertIn("endpoint_tg_fox_c", table.columns)
         self.assertTrue(np.isfinite(table.loc[1, "endpoint_tg_fox_c"]))
         self.assertEqual(table.loc[1, "split_group"], "P1")
+
+    def test_mask_hybrid186_for_nonhomopolymer_keeps_homopolymer_only(self):
+        frame = pd.DataFrame(
+            {
+                "is_homopolymer": [1.0, 0.0],
+                "emb_mean_045": [1.0, 2.0],
+                "emb_mean_046": [3.0, 4.0],
+                "emb_std_231": [5.0, 6.0],
+            }
+        )
+        masked = mask_hybrid186_for_nonhomopolymer(frame)
+        self.assertEqual(masked.loc[0, "emb_mean_046"], 3.0)
+        self.assertTrue(np.isnan(masked.loc[1, "emb_mean_046"]))
+        self.assertTrue(np.isnan(masked.loc[1, "emb_std_231"]))
+        self.assertEqual(masked.loc[1, "emb_mean_045"], 2.0)
 
     def test_cli_trains_on_existing_feature_table(self):
         from scripts.train_universal_tg_single_regressor import main

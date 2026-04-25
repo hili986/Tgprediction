@@ -74,7 +74,7 @@ class ComponentFeatureFactory:
         return vector.copy()
 
     def _compute_vector(self, smiles: str) -> np.ndarray:
-        if self.layer.upper() != "HYBRID-186":
+        if self.layer.upper() not in {"HYBRID-186", "HYBRID-HOMO186"}:
             return compute_features(smiles, layer=self.layer, morgan_bits=self.morgan_bits)
         base = compute_features(smiles, layer="M2M-V", morgan_bits=self.morgan_bits)
         cached = self._cached_186_component(smiles)
@@ -331,6 +331,21 @@ def build_table_from_records(records: Sequence[PolymerRecord]) -> pd.DataFrame:
     return frame
 
 
+def mask_hybrid186_for_nonhomopolymer(frame: pd.DataFrame) -> pd.DataFrame:
+    out = frame.copy()
+    non_homo = out["is_homopolymer"].astype(float).lt(0.5)
+    for column in out.columns:
+        if not column.startswith(("emb_mean_", "emb_std_", "emb_min_", "emb_max_", "emb_contrast_")):
+            continue
+        try:
+            dim = int(column.rsplit("_", 1)[1])
+        except ValueError:
+            continue
+        if 46 <= dim <= 232:
+            out.loc[non_homo, column] = np.nan
+    return out
+
+
 def _component(factory: ComponentFeatureFactory, smiles: str, endpoint_tg_c: Optional[float], endpoint_source: str) -> ComponentRecord:
     return ComponentRecord(
         smiles=str(smiles),
@@ -540,6 +555,8 @@ def build_unified_training_table(args: argparse.Namespace) -> tuple[pd.DataFrame
         source_counts[name] = len(loaded)
         skipped_counts[name] = skipped
     table = build_table_from_records(records)
+    if str(args.feature_layer).upper() == "HYBRID-HOMO186":
+        table = mask_hybrid186_for_nonhomopolymer(table)
     return table, BuildReport(missing_sources, source_counts, skipped_counts)
 
 
