@@ -53,6 +53,8 @@ class ComponentFeatureFactory:
         self.morgan_bits = morgan_bits
         self._cache: dict[str, np.ndarray] = {}
         self._error_cache: dict[str, str] = {}
+        self._hybrid_lookup: Optional[dict[str, dict[str, np.ndarray | str]]] = None
+        self._hybrid_canonical_lookup: Optional[dict[str, dict[str, np.ndarray | str]]] = None
 
     def vector(self, smiles: str) -> np.ndarray:
         key = str(smiles).strip()
@@ -63,13 +65,75 @@ class ComponentFeatureFactory:
         if key in self._error_cache:
             raise ValueError(self._error_cache[key])
         try:
-            vector = compute_features(key, layer=self.layer, morgan_bits=self.morgan_bits)
+            vector = self._compute_vector(key)
             vector = np.asarray(vector, dtype=float).reshape(-1)
         except Exception as exc:
             self._error_cache[key] = f"feature extraction failed for {key}: {exc}"
             raise ValueError(self._error_cache[key]) from exc
         self._cache[key] = vector
         return vector.copy()
+
+    def _compute_vector(self, smiles: str) -> np.ndarray:
+        if self.layer.upper() != "HYBRID-186":
+            return compute_features(smiles, layer=self.layer, morgan_bits=self.morgan_bits)
+        base = compute_features(smiles, layer="M2M-V", morgan_bits=self.morgan_bits)
+        cached = self._cached_186_component(smiles)
+        if cached is None:
+            besttg = np.full(186, np.nan, dtype=float)
+            hit = 0.0
+        else:
+            besttg = np.hstack(
+                [
+                    np.asarray(cached["phyc"], dtype=float),
+                    np.asarray(cached["gnn"], dtype=float),
+                    np.asarray(cached["pbert"], dtype=float),
+                ]
+            )
+            hit = 1.0
+        return np.hstack([base, besttg, np.array([hit], dtype=float)])
+
+    def _cached_186_component(self, smiles: str) -> Optional[dict[str, np.ndarray | str]]:
+        if self._hybrid_lookup is None or self._hybrid_canonical_lookup is None:
+            self._load_hybrid_186_cache()
+        assert self._hybrid_lookup is not None
+        assert self._hybrid_canonical_lookup is not None
+        if smiles in self._hybrid_lookup:
+            return self._hybrid_lookup[smiles]
+        from scripts.predict_tg_tabpfn_186d import _canonical_repeat_unit_key
+
+        canonical = _canonical_repeat_unit_key(smiles)
+        if canonical is None:
+            return None
+        return self._hybrid_canonical_lookup.get(canonical)
+
+    def _load_hybrid_186_cache(self) -> None:
+        from sklearn.decomposition import PCA
+
+        from scripts.predict_tg_tabpfn_186d import (
+            InferencePaths,
+            PBERT_PCA_DIM,
+            _build_canonical_component_lookup,
+            _build_precomputed_component_lookup,
+            _load_training_blocks,
+        )
+
+        paths = InferencePaths(
+            data_path=PROJECT_ROOT / "data" / "unified_tg.parquet",
+            phyc_cache=PROJECT_ROOT / "data" / "feature_matrix_PHY-C.parquet",
+            gnn_cache=PROJECT_ROOT / "data" / "gnn_embeddings_64d.parquet",
+            pbert_cache=PROJECT_ROOT / "data" / "polybert_embeddings.parquet",
+            chain_physics_cache=PROJECT_ROOT / "data" / "chain_physics_cache.parquet",
+            polybert_model_dir=PROJECT_ROOT / "data" / "polybert_model",
+            gnn_checkpoint=PROJECT_ROOT / "checkpoints" / "gnn_pretrained.pt",
+        )
+        smiles, x_phyc, x_gnn, x_pbert_raw, _ = _load_training_blocks(paths)
+        valid = np.isfinite(x_pbert_raw).all(axis=1)
+        pca = PCA(n_components=PBERT_PCA_DIM, random_state=42)
+        pca.fit(x_pbert_raw[valid])
+        x_pbert = np.full((len(x_pbert_raw), PBERT_PCA_DIM), np.nan, dtype=float)
+        x_pbert[valid] = pca.transform(x_pbert_raw[valid])
+        self._hybrid_lookup = _build_precomputed_component_lookup(smiles, x_phyc, x_gnn, x_pbert)
+        self._hybrid_canonical_lookup = _build_canonical_component_lookup(self._hybrid_lookup)
 
 
 def compute_metrics(y_true, y_pred) -> dict[str, float]:
