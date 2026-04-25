@@ -78,6 +78,7 @@ class TestTrainUniversalSingleRegressor(unittest.TestCase):
         model = choose_model("physics_hybrid_balanced", random_state=7)
         self.assertEqual(model.__class__.__name__, "PhysicsResidualKernelRegressor")
         self.assertEqual(model.high_dim_start, 46)
+        self.assertEqual(model.high_dim_end, 233)
         self.assertAlmostEqual(model.high_dim_kernel_weight, 0.25)
 
     def test_choose_model_returns_custom_physics_homo_correction(self):

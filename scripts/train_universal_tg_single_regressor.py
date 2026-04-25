@@ -209,7 +209,7 @@ def choose_model(name: str, random_state: int = 42):
             residual_lambda=2.0,
             random_state=random_state,
             high_dim_start=46,
-            high_dim_end=232,
+            high_dim_end=233,
             high_dim_kernel_weight=0.25,
         )
     if key == "physics_homo_correction":
@@ -219,7 +219,7 @@ def choose_model(name: str, random_state: int = 42):
             residual_lambda=2.0,
             random_state=random_state,
             high_dim_start=46,
-            high_dim_end=232,
+            high_dim_end=233,
             high_dim_kernel_weight=0.0,
             homo_correction=True,
             homo_correction_lambda=0.5,
