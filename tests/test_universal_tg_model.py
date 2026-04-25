@@ -1,0 +1,54 @@
+import unittest
+
+import numpy as np
+import pandas as pd
+
+from src.ml.universal_tg_model import PhysicsResidualKernelRegressor
+
+
+class TestPhysicsResidualKernelRegressor(unittest.TestCase):
+    def test_fits_physics_plus_nonlinear_residual(self):
+        rng = np.random.default_rng(7)
+        x = np.linspace(-2.0, 2.0, 80)
+        frame = pd.DataFrame(
+            {
+                "endpoint_tg_fox_c": 50.0 + 10.0 * x,
+                "w_entropy": np.abs(x),
+                "emb_mean_000": x,
+                "emb_mean_001": x * x,
+            }
+        )
+        y = frame["endpoint_tg_fox_c"].to_numpy() + 8.0 * np.sin(3.0 * x)
+        y = y + rng.normal(0.0, 0.05, size=len(y))
+
+        model = PhysicsResidualKernelRegressor(
+            n_landmarks=80,
+            prior_lambda=0.01,
+            residual_lambda=0.001,
+            random_state=3,
+        )
+        model.fit(frame, y)
+        pred = model.predict(frame)
+
+        self.assertLess(float(np.mean(np.abs(pred - y))), 0.6)
+        self.assertIn("endpoint_tg_fox_c", model.diagnostics_.prior_columns)
+        self.assertEqual(model.diagnostics_.n_landmarks, 80)
+
+    def test_handles_missing_values_and_sample_weights(self):
+        frame = pd.DataFrame(
+            {
+                "endpoint_tg_fox_c": [0.0, 10.0, np.nan, 30.0],
+                "emb_mean_000": [0.0, 1.0, 2.0, np.nan],
+            }
+        )
+        y = np.array([0.0, 10.0, 20.0, 30.0])
+        weights = np.array([1.0, 1.0, 0.0, 10.0])
+        model = PhysicsResidualKernelRegressor(n_landmarks=3, random_state=1)
+        model.fit(frame, y, sample_weight=weights)
+        pred = model.predict(frame)
+        self.assertEqual(pred.shape, (4,))
+        self.assertTrue(np.isfinite(pred).all())
+
+
+if __name__ == "__main__":
+    unittest.main()

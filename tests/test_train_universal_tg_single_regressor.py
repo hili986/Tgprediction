@@ -49,6 +49,12 @@ class TestTrainUniversalSingleRegressor(unittest.TestCase):
         self.assertTrue(hasattr(model, "fit"))
         self.assertTrue(hasattr(model, "predict"))
 
+    def test_choose_model_returns_custom_physics_kernel(self):
+        model = choose_model("physics_kernel", random_state=7)
+        self.assertEqual(model.__class__.__name__, "PhysicsResidualKernelRegressor")
+        self.assertTrue(hasattr(model, "fit"))
+        self.assertTrue(hasattr(model, "predict"))
+
     def test_normalise_limit_distinguishes_disable_from_unlimited(self):
         self.assertIsNone(_normalise_limit(-1))
         self.assertEqual(_normalise_limit(0), 0)

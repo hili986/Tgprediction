@@ -28,6 +28,7 @@ from src.ml.universal_tg_features import (
     numeric_feature_columns,
     polymer_record_to_features,
 )
+from src.ml.universal_tg_model import PhysicsResidualKernelRegressor
 
 
 NUCLEOBASE_ENDPOINT_TG_C = {
@@ -104,6 +105,13 @@ def choose_model(name: str, random_state: int = 42):
             )
         except Exception:
             key = "extratrees"
+    if key == "physics_kernel":
+        return PhysicsResidualKernelRegressor(
+            n_landmarks=1200,
+            prior_lambda=0.5,
+            residual_lambda=2.0,
+            random_state=random_state,
+        )
     if key == "histgradient":
         return HistGradientBoostingRegressor(
             max_iter=800,
@@ -442,6 +450,8 @@ def load_unified_table(path: Path) -> pd.DataFrame:
 
 
 def make_estimator(model_name: str, random_state: int) -> Pipeline:
+    if str(model_name).lower() == "physics_kernel":
+        return choose_model(model_name, random_state=random_state)
     return Pipeline(
         [
             ("imputer", SimpleImputer(strategy="median")),
@@ -583,7 +593,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--build-table", action="store_true", help="Build unified feature table before training.")
     parser.add_argument("--table", default="results/universal_single_regressor/unified_training_table.parquet")
     parser.add_argument("--output-dir", default="results/universal_single_regressor/exp_default")
-    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient", "xgboost", "lightgbm"])
+    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient", "xgboost", "lightgbm", "physics_kernel"])
     parser.add_argument("--feature-layer", default="M2M-V")
     parser.add_argument("--morgan-bits", type=int, default=256)
     parser.add_argument("--test-size", type=float, default=0.2)
