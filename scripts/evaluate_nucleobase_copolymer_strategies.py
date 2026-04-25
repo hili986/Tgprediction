@@ -12,7 +12,7 @@ import json
 import math
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, Optional
+from typing import Dict, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -122,6 +122,87 @@ def _loocv_kwei(points: list[BinaryCopolymerPoint]) -> np.ndarray:
     return np.asarray(preds, dtype=float)
 
 
+def _physics_ridge_features(
+    points: list[BinaryCopolymerPoint],
+    labels: Sequence[str],
+    categories: Sequence[str],
+) -> np.ndarray:
+    rows = []
+    for point, label in zip(points, labels):
+        x2 = 1.0 - point.w1
+        interaction = point.w1 * x2
+        fox = fox_tg_k([point.tg1_k, point.tg2_k], [point.w1, x2])
+        rows.append(
+            [
+                fox,
+                x2,
+                x2 * x2,
+                interaction,
+                point.tg2_k - point.tg1_k,
+                *(interaction if label == category else 0.0 for category in categories),
+            ]
+        )
+    return np.asarray(rows, dtype=float)
+
+
+def _ridge_fit_predict(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_test: np.ndarray,
+) -> np.ndarray:
+    if len(y_train) == 0:
+        return np.full(len(x_test), float("nan"))
+    if len(y_train) < 3:
+        return np.full(len(x_test), float(np.mean(y_train)))
+
+    from sklearn.linear_model import RidgeCV
+
+    model = RidgeCV(alphas=np.logspace(-4, 4, 30))
+    model.fit(x_train, y_train)
+    return np.asarray(model.predict(x_test), dtype=float)
+
+
+def _physics_ridge_loocv(
+    points: list[BinaryCopolymerPoint],
+    labels: Sequence[str],
+) -> np.ndarray:
+    categories = sorted(set(labels))
+    x = _physics_ridge_features(points, labels, categories)
+    y = np.asarray([point.target_tg_k for point in points], dtype=float)
+    preds = []
+    for index in range(len(points)):
+        train = np.array([i for i in range(len(points)) if i != index], dtype=int)
+        preds.append(_ridge_fit_predict(x[train], y[train], x[[index]])[0])
+    return np.asarray(preds, dtype=float)
+
+
+def _physics_ridge_leave_group_out(
+    points: list[BinaryCopolymerPoint],
+    labels: Sequence[str],
+) -> np.ndarray:
+    categories = sorted(set(labels))
+    x = _physics_ridge_features(points, labels, categories)
+    y = np.asarray([point.target_tg_k for point in points], dtype=float)
+    labels_array = np.asarray(labels)
+    preds = []
+    for index, label in enumerate(labels_array):
+        train = np.flatnonzero(labels_array != label)
+        if len(train) == 0:
+            train = np.array([i for i in range(len(points)) if i != index], dtype=int)
+        preds.append(_ridge_fit_predict(x[train], y[train], x[[index]])[0])
+    return np.asarray(preds, dtype=float)
+
+
+def _physics_ridge_fit(
+    points: list[BinaryCopolymerPoint],
+    labels: Sequence[str],
+) -> np.ndarray:
+    categories = sorted(set(labels))
+    x = _physics_ridge_features(points, labels, categories)
+    y = np.asarray([point.target_tg_k for point in points], dtype=float)
+    return _ridge_fit_predict(x, y, x)
+
+
 def _metrics(y_true_k: np.ndarray, y_pred_k: np.ndarray) -> Dict[str, float]:
     valid = np.isfinite(y_true_k) & np.isfinite(y_pred_k)
     if not valid.any():
@@ -157,8 +238,18 @@ def evaluate_strategies(predictions: pd.DataFrame) -> tuple[pd.DataFrame, Dict[s
 
     actual_points = _binary_points(random_rows, endpoints_actual)
     if len(actual_points) == len(random_rows) and actual_points:
+        labels = [str(value) for value in random_rows["Nucleobase"].tolist()]
         details["gt_loocv_actual_endpoint_tg_c"] = _loocv_gt(actual_points) - 273.15
         details["kwei_loocv_actual_endpoint_tg_c"] = _loocv_kwei(actual_points) - 273.15
+        details["physics_ridge_loocv_actual_endpoint_tg_c"] = (
+            _physics_ridge_loocv(actual_points, labels) - 273.15
+        )
+        details["physics_ridge_leave_base_out_actual_endpoint_tg_c"] = (
+            _physics_ridge_leave_group_out(actual_points, labels) - 273.15
+        )
+        details["physics_ridge_fit_actual_endpoint_tg_c"] = (
+            _physics_ridge_fit(actual_points, labels) - 273.15
+        )
 
         k_global, q_global = fit_kwei_k_q(actual_points)
         details["kwei_fit_actual_endpoint_tg_c"] = [
@@ -168,6 +259,9 @@ def evaluate_strategies(predictions: pd.DataFrame) -> tuple[pd.DataFrame, Dict[s
     else:
         details["gt_loocv_actual_endpoint_tg_c"] = float("nan")
         details["kwei_loocv_actual_endpoint_tg_c"] = float("nan")
+        details["physics_ridge_loocv_actual_endpoint_tg_c"] = float("nan")
+        details["physics_ridge_leave_base_out_actual_endpoint_tg_c"] = float("nan")
+        details["physics_ridge_fit_actual_endpoint_tg_c"] = float("nan")
         details["kwei_fit_actual_endpoint_tg_c"] = float("nan")
         k_global, q_global = float("nan"), float("nan")
 
@@ -179,6 +273,9 @@ def evaluate_strategies(predictions: pd.DataFrame) -> tuple[pd.DataFrame, Dict[s
         "gt_loocv_actual_endpoint_tg_c",
         "kwei_loocv_actual_endpoint_tg_c",
         "kwei_fit_actual_endpoint_tg_c",
+        "physics_ridge_loocv_actual_endpoint_tg_c",
+        "physics_ridge_leave_base_out_actual_endpoint_tg_c",
+        "physics_ridge_fit_actual_endpoint_tg_c",
         "fox_model_endpoint_tg_c",
         "gt_est_model_endpoint_tg_c",
     ]
