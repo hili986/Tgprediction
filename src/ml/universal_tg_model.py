@@ -45,6 +45,9 @@ class PhysicsResidualKernelRegressor:
         kernel_scales: Sequence[float] = (1.0,),
         local_k: int = 0,
         local_weight: float = 0.0,
+        high_dim_start: Optional[int] = None,
+        high_dim_end: Optional[int] = None,
+        high_dim_kernel_weight: float = 1.0,
     ) -> None:
         self.n_landmarks = int(n_landmarks)
         self.gamma = gamma
@@ -56,6 +59,9 @@ class PhysicsResidualKernelRegressor:
             raise ValueError("kernel_scales must contain at least one positive value.")
         self.local_k = int(local_k)
         self.local_weight = float(local_weight)
+        self.high_dim_start = high_dim_start
+        self.high_dim_end = high_dim_end
+        self.high_dim_kernel_weight = float(high_dim_kernel_weight)
         self.prior_column_patterns = list(
             prior_column_patterns
             or [
@@ -86,6 +92,8 @@ class PhysicsResidualKernelRegressor:
         self.x_scale_ = np.sqrt(np.average(centered * centered, axis=0, weights=weights))
         self.x_scale_[~np.isfinite(self.x_scale_) | (self.x_scale_ < 1e-12)] = 1.0
         x_scaled = self._scale(x_imputed)
+        self.kernel_feature_weights_ = self._kernel_feature_weights(feature_names, x_scaled.shape[1])
+        x_kernel = x_scaled * self.kernel_feature_weights_
 
         self.prior_indices_ = self._select_prior_indices(feature_names)
         prior_design = self._prior_design(x_scaled)
@@ -93,13 +101,13 @@ class PhysicsResidualKernelRegressor:
         prior_pred = prior_design @ self.prior_coef_
         residual = y_arr - prior_pred
 
-        landmark_idx = self._select_landmarks(x_scaled, weights)
-        self.landmarks_ = x_scaled[landmark_idx].copy()
+        landmark_idx = self._select_landmarks(x_kernel, weights)
+        self.landmarks_ = x_kernel[landmark_idx].copy()
         self.gamma_ = float(self.gamma) if self.gamma is not None else self._median_gamma(self.landmarks_)
-        phi = self._rbf_features(x_scaled)
+        phi = self._rbf_features(x_kernel)
         kernel_residual = residual
         self.residual_coef_ = self._weighted_ridge(phi, kernel_residual, weights, self.residual_lambda)
-        self.train_scaled_ = x_scaled.copy()
+        self.train_kernel_ = x_kernel.copy()
         self.train_residual_ = residual.copy()
         self.train_weights_ = weights.copy()
         self.diagnostics_ = PhysicsKernelDiagnostics(
@@ -113,11 +121,12 @@ class PhysicsResidualKernelRegressor:
     def predict(self, X) -> np.ndarray:
         x_raw, _ = self._as_matrix_and_names(X)
         x_scaled = self._scale(self._impute(x_raw))
+        x_kernel = x_scaled * self.kernel_feature_weights_
         prior = self._prior_design(x_scaled) @ self.prior_coef_
-        kernel_residual = self._rbf_features(x_scaled) @ self.residual_coef_
+        kernel_residual = self._rbf_features(x_kernel) @ self.residual_coef_
         if self.local_k <= 0 or self.local_weight <= 0:
             return prior + kernel_residual
-        local_residual = self._local_residual(x_scaled)
+        local_residual = self._local_residual(x_kernel)
         return prior + (1.0 - self.local_weight) * kernel_residual + self.local_weight * local_residual
 
     def _as_matrix_and_names(self, X) -> tuple[np.ndarray, list[str]]:
@@ -173,6 +182,26 @@ class PhysicsResidualKernelRegressor:
             if any(pattern in lower for pattern in self.prior_column_patterns):
                 indices.append(idx)
         return np.asarray(indices, dtype=int)
+
+    def _kernel_feature_weights(self, feature_names: Sequence[str], n_features: int) -> np.ndarray:
+        weights = np.ones(n_features, dtype=float)
+        if self.high_dim_start is None:
+            return weights
+        end = self.high_dim_end if self.high_dim_end is not None else 10**9
+        start = max(0, int(self.high_dim_start))
+        end = int(end)
+        if start >= end:
+            return weights
+        for idx, name in enumerate(feature_names):
+            for prefix in ["emb_mean_", "emb_std_", "emb_min_", "emb_max_", "emb_contrast_"]:
+                if str(name).startswith(prefix):
+                    try:
+                        dim = int(str(name).rsplit("_", 1)[1])
+                    except ValueError:
+                        continue
+                    if start <= dim < end:
+                        weights[idx] *= self.high_dim_kernel_weight
+        return weights
 
     def _prior_design(self, x_scaled: np.ndarray) -> np.ndarray:
         intercept = np.ones((x_scaled.shape[0], 1), dtype=float)
@@ -239,8 +268,8 @@ class PhysicsResidualKernelRegressor:
         return np.maximum(d2, 0.0)
 
     def _local_residual(self, x_scaled: np.ndarray) -> np.ndarray:
-        k = min(max(1, self.local_k), self.train_scaled_.shape[0])
-        d2 = self._squared_distances(x_scaled, self.train_scaled_)
+        k = min(max(1, self.local_k), self.train_kernel_.shape[0])
+        d2 = self._squared_distances(x_scaled, self.train_kernel_)
         nearest = np.argpartition(d2, kth=k - 1, axis=1)[:, :k]
         out = np.empty(x_scaled.shape[0], dtype=float)
         for row_idx, idx in enumerate(nearest):

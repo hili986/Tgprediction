@@ -85,6 +85,24 @@ class TestPhysicsResidualKernelRegressor(unittest.TestCase):
         pred = model.predict(frame)
         self.assertLess(float(np.mean(np.abs(pred - y))), 2.5)
 
+    def test_high_dim_kernel_weight_downweights_selected_embedding_dimensions(self):
+        frame = pd.DataFrame(
+            {
+                "emb_mean_000": [0.0, 1.0, 2.0],
+                "emb_mean_046": [10.0, 11.0, 12.0],
+                "endpoint_tg_fox_c": [0.0, 1.0, 2.0],
+            }
+        )
+        model = PhysicsResidualKernelRegressor(
+            n_landmarks=3,
+            high_dim_start=46,
+            high_dim_end=232,
+            high_dim_kernel_weight=0.25,
+        )
+        model.fit(frame, np.array([0.0, 1.0, 2.0]))
+        idx = list(frame.columns).index("emb_mean_046")
+        self.assertAlmostEqual(model.kernel_feature_weights_[idx], 0.25)
+
 
 if __name__ == "__main__":
     unittest.main()
