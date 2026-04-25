@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.train_universal_tg_single_regressor import (
+    _normalise_limit,
     build_table_from_records,
     choose_model,
     compute_metrics,
@@ -47,6 +48,11 @@ class TestTrainUniversalSingleRegressor(unittest.TestCase):
         model = choose_model("extratrees", random_state=7)
         self.assertTrue(hasattr(model, "fit"))
         self.assertTrue(hasattr(model, "predict"))
+
+    def test_normalise_limit_distinguishes_disable_from_unlimited(self):
+        self.assertIsNone(_normalise_limit(-1))
+        self.assertEqual(_normalise_limit(0), 0)
+        self.assertEqual(_normalise_limit(10), 10)
 
     def test_build_table_from_records_returns_numeric_features(self):
         records = [

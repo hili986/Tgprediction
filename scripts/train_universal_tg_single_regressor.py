@@ -202,7 +202,7 @@ def load_homopolymer_records(path: Path, factory: ComponentFeatureFactory, limit
     if not path.exists():
         return [], 0
     frame = pd.read_parquet(path) if path.suffix.lower() == ".parquet" else pd.read_csv(path)
-    if limit:
+    if limit is not None:
         frame = frame.head(limit)
     records: list[PolymerRecord] = []
     skipped = 0
@@ -238,7 +238,7 @@ def load_polyinfo_records(path: Path, factory: ComponentFeatureFactory, limit: O
     frame = pd.read_csv(path)
     if "status" in frame.columns:
         frame = frame[frame["status"].astype(str).eq("usable")].copy()
-    if limit:
+    if limit is not None:
         frame = frame.head(limit)
     records: list[PolymerRecord] = []
     skipped = 0
@@ -289,7 +289,7 @@ def load_nucleobase_records(path: Path, factory: ComponentFeatureFactory, limit:
         frame = frame[frame["status"].astype(str).eq("predicted")].copy()
     if "Architecture" in frame.columns:
         frame = frame[frame["Architecture"].astype(str).str.contains("random", case=False, na=False)].copy()
-    if limit:
+    if limit is not None:
         frame = frame.head(limit)
     records: list[PolymerRecord] = []
     skipped = 0
@@ -337,7 +337,7 @@ def load_virtual_records(path: Path, factory: ComponentFeatureFactory, limit: Op
     frame = pd.read_csv(path)
     if "status" in frame.columns:
         frame = frame[~frame["status"].astype(str).str.contains("error", case=False, na=False)].copy()
-    if limit:
+    if limit is not None:
         frame = frame.head(limit)
     records: list[PolymerRecord] = []
     skipped = 0
@@ -504,23 +504,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--polyinfo-details", default="results/copolymer_residual_model/polyinfo_physics_details_clean.csv")
     parser.add_argument("--nucleobase-details", default="results/copolymer_residual_model/nucleobase_strategy_details.csv")
     parser.add_argument("--virtual-csv", default="results/virtual_data/bicerano_binary_random_100k_reuse.csv")
-    parser.add_argument("--max-homopolymer", type=int, default=0)
-    parser.add_argument("--max-polyinfo", type=int, default=0)
-    parser.add_argument("--max-nucleobase", type=int, default=0)
+    parser.add_argument("--max-homopolymer", type=int, default=-1)
+    parser.add_argument("--max-polyinfo", type=int, default=-1)
+    parser.add_argument("--max-nucleobase", type=int, default=-1)
     parser.add_argument("--max-virtual", type=int, default=20000)
     return parser
 
 
-def _positive_limit(value: int) -> Optional[int]:
-    return value if value and value > 0 else None
+def _normalise_limit(value: int) -> Optional[int]:
+    return value if value >= 0 else None
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = build_parser().parse_args(argv)
-    args.max_homopolymer = _positive_limit(args.max_homopolymer)
-    args.max_polyinfo = _positive_limit(args.max_polyinfo)
-    args.max_nucleobase = _positive_limit(args.max_nucleobase)
-    args.max_virtual = _positive_limit(args.max_virtual)
+    args.max_homopolymer = _normalise_limit(args.max_homopolymer)
+    args.max_polyinfo = _normalise_limit(args.max_polyinfo)
+    args.max_nucleobase = _normalise_limit(args.max_nucleobase)
+    args.max_virtual = _normalise_limit(args.max_virtual)
 
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
