@@ -66,7 +66,11 @@ def _repeat_unit_mw(smiles: object) -> Optional[float]:
     return mw if math.isfinite(mw) and mw > 0.0 else None
 
 
-def _component1_fraction(row: pd.Series, composition_basis: str) -> Optional[float]:
+def _component1_fraction(
+    row: pd.Series,
+    composition_basis: str,
+    ratio_orientation: str,
+) -> Optional[float]:
     ratio_1 = _finite_float(row.get("ratio_1"))
     if ratio_1 is None:
         return None
@@ -79,20 +83,86 @@ def _component1_fraction(row: pd.Series, composition_basis: str) -> Optional[flo
         mw1 = _repeat_unit_mw(row.get("SMILES_1"))
         mw2 = _repeat_unit_mw(row.get("SMILES_2"))
         if mw1 is not None and mw2 is not None:
-            denom = fraction * mw1 + (1.0 - fraction) * mw2
+            mol_fraction_1 = fraction if ratio_orientation == "component1" else 1.0 - fraction
+            denom = mol_fraction_1 * mw1 + (1.0 - mol_fraction_1) * mw2
             if denom > 0.0:
-                fraction = fraction * mw1 / denom
+                return mol_fraction_1 * mw1 / denom
+    if ratio_orientation == "component2":
+        fraction = 1.0 - fraction
     return fraction
+
+
+def _orientation_group(row: pd.Series) -> str:
+    source = "related" if str(row.get("notes", "")).strip() == "from_related_table" else "direct"
+    return f"{row.get('COID', '')}|{source}"
+
+
+def _fox_prediction_for_orientation(
+    row: pd.Series,
+    endpoint_tg: Dict[str, float],
+    composition_basis: str,
+    ratio_orientation: str,
+) -> Optional[float]:
+    key1 = _canonical_repeat_unit_key(str(row.get("SMILES_1", "")))
+    key2 = _canonical_repeat_unit_key(str(row.get("SMILES_2", "")))
+    if key1 not in endpoint_tg or key2 not in endpoint_tg:
+        return None
+    w1 = _component1_fraction(row, composition_basis, ratio_orientation)
+    if w1 is None:
+        return None
+    pred = fox_tg_k([endpoint_tg[str(key1)], endpoint_tg[str(key2)]], [w1, 1.0 - w1])
+    return pred if math.isfinite(pred) else None
+
+
+def _infer_ratio_orientations(
+    real: pd.DataFrame,
+    endpoint_tg: Dict[str, float],
+    composition_basis: str,
+    ratio_orientation: str,
+) -> Dict[str, str]:
+    if ratio_orientation in {"component1", "component2"}:
+        return {
+            _orientation_group(row): ratio_orientation
+            for _, row in real.iterrows()
+        }
+
+    orientations: Dict[str, str] = {}
+    for _, group in real.groupby(real.apply(_orientation_group, axis=1)):
+        errors: Dict[str, list[float]] = {"component1": [], "component2": []}
+        for _, row in group.iterrows():
+            ratio_1 = _finite_float(row.get("ratio_1"))
+            target_c = _finite_float(row.get("Tg_C"))
+            if ratio_1 is None or target_c is None or not (ratio_1 <= 5.0 or ratio_1 >= 95.0):
+                continue
+            for candidate in ["component1", "component2"]:
+                pred = _fox_prediction_for_orientation(row, endpoint_tg, composition_basis, candidate)
+                if pred is not None:
+                    errors[candidate].append(abs((pred - 273.15) - target_c))
+        group_key = _orientation_group(group.iloc[0])
+        if errors["component1"] or errors["component2"]:
+            score1 = float(np.mean(errors["component1"])) if errors["component1"] else float("inf")
+            score2 = float(np.mean(errors["component2"])) if errors["component2"] else float("inf")
+            orientations[group_key] = "component1" if score1 <= score2 else "component2"
+        else:
+            orientations[group_key] = "component1"
+    return orientations
 
 
 def _load_points(
     real_csv: Path,
     unified_tg_path: Path,
     composition_basis: str,
-) -> tuple[pd.DataFrame, list[BinaryCopolymerPoint], list[str]]:
+    ratio_orientation: str,
+) -> tuple[pd.DataFrame, list[BinaryCopolymerPoint], list[str], Dict[str, str]]:
     real = pd.read_csv(real_csv)
     unified = pd.read_parquet(unified_tg_path)
     endpoint_tg = _component_tg_lookup(unified)
+    orientation_by_group = _infer_ratio_orientations(
+        real,
+        endpoint_tg,
+        composition_basis,
+        ratio_orientation,
+    )
 
     rows = []
     points: list[BinaryCopolymerPoint] = []
@@ -103,7 +173,9 @@ def _load_points(
         key1 = _canonical_repeat_unit_key(smiles1)
         key2 = _canonical_repeat_unit_key(smiles2)
         tg_c = _finite_float(row.get("Tg_C"))
-        w1 = _component1_fraction(row, composition_basis)
+        orientation_group = _orientation_group(row)
+        row_orientation = orientation_by_group.get(orientation_group, "component1")
+        w1 = _component1_fraction(row, composition_basis, row_orientation)
         reason = ""
         if key1 is None or key2 is None:
             reason = "invalid component SMILES"
@@ -121,6 +193,8 @@ def _load_points(
                 "composition_basis": composition_basis,
                 "canonical_1": key1 or "",
                 "canonical_2": key2 or "",
+                "orientation_group": orientation_group,
+                "ratio_orientation": row_orientation,
                 "status": "skipped" if reason else "usable",
                 "reason": reason,
             }
@@ -146,7 +220,7 @@ def _load_points(
         rows.append(base_row)
         points.append(point)
         labels.append(str(row.get("COID", "")))
-    return pd.DataFrame(rows), points, labels
+    return pd.DataFrame(rows), points, labels, orientation_by_group
 
 
 def _loocv_kwei(points: list[BinaryCopolymerPoint]) -> np.ndarray:
@@ -294,15 +368,26 @@ def evaluate_polyinfo_physics(
     real_csv: Path,
     unified_tg_path: Path,
     composition_basis: str,
+    ratio_orientation: str,
+    include_pure_endpoints: bool = False,
 ) -> tuple[pd.DataFrame, Dict[str, object]]:
-    details, points, labels = _load_points(real_csv, unified_tg_path, composition_basis)
+    details, points, labels, orientation_by_group = _load_points(
+        real_csv,
+        unified_tg_path,
+        composition_basis,
+        ratio_orientation,
+    )
     usable_index = details.index[details["status"].eq("usable")].to_numpy()
     if not points:
         return details, {
             "composition_basis": composition_basis,
+            "ratio_orientation": ratio_orientation,
+            "include_pure_endpoints": include_pure_endpoints,
             "n_rows": int(len(details)),
             "n_usable": 0,
+            "n_evaluated": 0,
             "status_counts": details["status"].value_counts(dropna=False).to_dict(),
+            "orientation_by_group": orientation_by_group,
             "overall": {},
         }
 
@@ -342,13 +427,23 @@ def evaluate_polyinfo_physics(
         details.loc[usable_index, name] = values
 
     methods = list(predictions.keys())
+    usable = details.loc[usable_index].copy()
+    if include_pure_endpoints:
+        evaluated = usable
+    else:
+        evaluated = usable[
+            (usable["w1_used"].astype(float) > 1e-9)
+            & (usable["w1_used"].astype(float) < 1.0 - 1e-9)
+        ].copy()
     overall = {
-        method: _metrics(y_true, details.loc[usable_index, method].to_numpy(dtype=float) + 273.15)
+        method: _metrics(
+            evaluated["Tg_C"].to_numpy(dtype=float) + 273.15,
+            evaluated[method].to_numpy(dtype=float) + 273.15,
+        )
         for method in methods
     }
     by_ratio_unit: Dict[str, Dict[str, Dict[str, float]]] = {}
-    usable = details.loc[usable_index].copy()
-    for ratio_unit, group in usable.groupby("ratio_unit", dropna=False):
+    for ratio_unit, group in evaluated.groupby("ratio_unit", dropna=False):
         group_y = group["Tg_C"].to_numpy(dtype=float) + 273.15
         by_ratio_unit[str(ratio_unit)] = {
             method: _metrics(group_y, group[method].to_numpy(dtype=float) + 273.15)
@@ -357,11 +452,19 @@ def evaluate_polyinfo_physics(
 
     summary: Dict[str, object] = {
         "composition_basis": composition_basis,
+        "ratio_orientation": ratio_orientation,
+        "include_pure_endpoints": include_pure_endpoints,
         "n_rows": int(len(details)),
         "n_usable": int(len(points)),
+        "n_evaluated": int(len(evaluated)),
+        "n_pure_endpoint_rows": int(len(usable) - len(evaluated)),
         "n_systems": int(len(set(labels))),
         "status_counts": details["status"].value_counts(dropna=False).to_dict(),
+        "ratio_orientation_counts_usable": usable["ratio_orientation"].value_counts(dropna=False).to_dict(),
+        "ratio_orientation_counts_evaluated": evaluated["ratio_orientation"].value_counts(dropna=False).to_dict(),
+        "orientation_by_group": orientation_by_group,
         "ratio_unit_counts_usable": usable["ratio_unit"].value_counts(dropna=False).to_dict(),
+        "ratio_unit_counts_evaluated": evaluated["ratio_unit"].value_counts(dropna=False).to_dict(),
         "overall": overall,
         "by_ratio_unit": by_ratio_unit,
     }
@@ -377,6 +480,20 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["reported", "weight"],
         default="weight",
         help="Use reported ratio as-is, or convert mol%% rows to approximate weight fraction.",
+    )
+    parser.add_argument(
+        "--ratio-orientation",
+        choices=["auto-boundary", "component1", "component2"],
+        default="auto-boundary",
+        help=(
+            "Interpret ratio_1 as component1, component2, or infer by endpoint rows "
+            "within each COID/direct-vs-related group."
+        ),
+    )
+    parser.add_argument(
+        "--include-pure-endpoints",
+        action="store_true",
+        help="Include w=0/1 homopolymer endpoint rows in reported evaluation metrics.",
     )
     parser.add_argument(
         "--output-csv",
@@ -395,6 +512,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         Path(args.real_csv),
         Path(args.unified_tg),
         args.composition_basis,
+        args.ratio_orientation,
+        args.include_pure_endpoints,
     )
 
     output_csv = Path(args.output_csv)
