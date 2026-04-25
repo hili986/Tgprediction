@@ -423,6 +423,20 @@ class BestTgPredictor:
         self.model.fit(X_train, y)
         print("Model fitted.")
 
+    def precomputed_component_match(self, smiles: str) -> Tuple[str, Optional[str]]:
+        try:
+            smi = _validate_repeat_unit_smiles(smiles)
+        except ValueError:
+            return "invalid", None
+        if smi in self._precomputed_component_lookup:
+            return "exact", smi
+        canonical_key = _canonical_repeat_unit_key(smi)
+        if canonical_key is not None:
+            component = self._canonical_component_lookup.get(canonical_key)
+            if component is not None:
+                return "canonical", str(component["smiles"])
+        return "miss", None
+
     def _load_gnn_model(self):
         if self._gnn_model is not None:
             return self._gnn_model

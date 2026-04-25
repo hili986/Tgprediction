@@ -19,7 +19,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -68,6 +68,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-teacher-residual-scalars",
         action="store_true",
         help="Do not add current teacher/Fox scalar predictions to residual fine-tuning features.",
+    )
+    parser.add_argument(
+        "--precomputed-real-components-only",
+        action="store_true",
+        help=(
+            "For real-data fine-tuning, skip rows containing components that are not "
+            "available through exact/canonical 7k precomputed feature reuse."
+        ),
     )
 
     parser.add_argument("--device", choices=["cuda", "cpu"], default="cuda")
@@ -150,6 +158,33 @@ def _write_json(path: Path, payload: Dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _filter_records_with_precomputed_components(records, predictor) -> Tuple[list, pd.DataFrame]:
+    kept = []
+    skipped_rows: List[Dict[str, object]] = []
+    reusable = {"exact", "canonical"}
+    for index, record in enumerate(records):
+        matches = [predictor.precomputed_component_match(component) for component in record.components]
+        missing = [
+            (component, status)
+            for component, (status, _) in zip(record.components, matches)
+            if status not in reusable
+        ]
+        if missing:
+            skipped_rows.append(
+                {
+                    "record_index": index,
+                    "components": "|".join(record.components),
+                    "weights": "|".join(f"{weight:.8g}" for weight in record.weights),
+                    "missing_components": "|".join(component for component, _ in missing),
+                    "missing_statuses": "|".join(status for _, status in missing),
+                    "target_tg_k": record.target_tg_k,
+                }
+            )
+            continue
+        kept.append(record)
+    return kept, pd.DataFrame(skipped_rows)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -204,6 +239,21 @@ def main(argv: list[str] | None = None) -> int:
         if not real_records:
             raise ValueError("No valid real copolymer rows found.")
         _progress(f"Real records: {len(real_records)}")
+        if args.precomputed_real_components_only:
+            real_records, skipped_real = _filter_records_with_precomputed_components(
+                real_records,
+                predictor,
+            )
+            skipped_path = output_dir / "skipped_real_missing_precomputed_components.csv"
+            if not skipped_real.empty:
+                skipped_real.to_csv(skipped_path, index=False, encoding="utf-8-sig")
+                _progress(f"Saved skipped real records: {skipped_path}")
+            _progress(
+                "Precomputed real component filter: "
+                f"kept={len(real_records)}, skipped={len(skipped_real)}"
+            )
+            if not real_records:
+                raise ValueError("No real copolymer rows remain after precomputed component filtering.")
 
         include_teacher = not args.no_teacher_residual_scalars
         _progress("Building real residual feature matrix...")

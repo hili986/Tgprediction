@@ -84,6 +84,21 @@ class TestPrecomputedLookup(unittest.TestCase):
         self.assertEqual(result["smiles"], "*CC(*)C#N")
         self.assertEqual(result["chain_physics_source"], "precomputed_canonical")
 
+    def test_precomputed_component_match_reports_source(self):
+        predictor = BestTgPredictor.__new__(BestTgPredictor)
+        predictor._precomputed_component_lookup = {"*CC(*)": {"smiles": "*CC(*)"}}
+        predictor._canonical_component_lookup = {
+            "*CC(*)C#N": {"smiles": "*CC(*)C#N"}
+        }
+
+        self.assertEqual(predictor.precomputed_component_match("*CC(*)"), ("exact", "*CC(*)"))
+        self.assertEqual(
+            predictor.precomputed_component_match("*C(C#N)C*"),
+            ("canonical", "*CC(*)C#N"),
+        )
+        self.assertEqual(predictor.precomputed_component_match("*CO(*)"), ("miss", None))
+        self.assertEqual(predictor.precomputed_component_match("CCO"), ("invalid", None))
+
     def test_component_homopolymer_prediction_is_cached(self):
         predictor = BestTgPredictor.__new__(BestTgPredictor)
         predictor._homopolymer_tg_cache = {}
