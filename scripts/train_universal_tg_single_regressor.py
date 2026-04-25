@@ -199,6 +199,8 @@ def _component(factory: ComponentFeatureFactory, smiles: str, endpoint_tg_c: Opt
 
 
 def load_homopolymer_records(path: Path, factory: ComponentFeatureFactory, limit: Optional[int] = None) -> tuple[list[PolymerRecord], int]:
+    if limit == 0:
+        return [], 0
     if not path.exists():
         return [], 0
     frame = pd.read_parquet(path) if path.suffix.lower() == ".parquet" else pd.read_csv(path)
@@ -233,6 +235,8 @@ def load_homopolymer_records(path: Path, factory: ComponentFeatureFactory, limit
 
 
 def load_polyinfo_records(path: Path, factory: ComponentFeatureFactory, limit: Optional[int] = None) -> tuple[list[PolymerRecord], int]:
+    if limit == 0:
+        return [], 0
     if not path.exists():
         return [], 0
     frame = pd.read_csv(path)
@@ -282,6 +286,8 @@ def _nucleobase_endpoint_for_component(index: int, base: str) -> tuple[Optional[
 
 
 def load_nucleobase_records(path: Path, factory: ComponentFeatureFactory, limit: Optional[int] = None) -> tuple[list[PolymerRecord], int]:
+    if limit == 0:
+        return [], 0
     if not path.exists():
         return [], 0
     frame = pd.read_csv(path)
@@ -332,6 +338,8 @@ def _target_from_virtual_row(row: pd.Series) -> Optional[float]:
 
 
 def load_virtual_records(path: Path, factory: ComponentFeatureFactory, limit: Optional[int] = None) -> tuple[list[PolymerRecord], int]:
+    if limit == 0:
+        return [], 0
     if not path.exists():
         return [], 0
     frame = pd.read_csv(path)
