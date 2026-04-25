@@ -42,12 +42,16 @@ class PhysicsResidualKernelRegressor:
         residual_lambda: float = 3.0,
         random_state: int = 42,
         prior_column_patterns: Optional[Sequence[str]] = None,
+        kernel_scales: Sequence[float] = (1.0,),
     ) -> None:
         self.n_landmarks = int(n_landmarks)
         self.gamma = gamma
         self.prior_lambda = float(prior_lambda)
         self.residual_lambda = float(residual_lambda)
         self.random_state = int(random_state)
+        self.kernel_scales = tuple(float(scale) for scale in kernel_scales if float(scale) > 0)
+        if not self.kernel_scales:
+            raise ValueError("kernel_scales must contain at least one positive value.")
         self.prior_column_patterns = list(
             prior_column_patterns
             or [
@@ -211,7 +215,9 @@ class PhysicsResidualKernelRegressor:
         return 1.0 / max(2.0 * median, 1e-12)
 
     def _rbf_features(self, x_scaled: np.ndarray) -> np.ndarray:
-        return np.exp(-self.gamma_ * self._squared_distances(x_scaled, self.landmarks_))
+        d2 = self._squared_distances(x_scaled, self.landmarks_)
+        blocks = [np.exp(-(self.gamma_ * scale) * d2) for scale in self.kernel_scales]
+        return blocks[0] if len(blocks) == 1 else np.hstack(blocks)
 
     def _squared_distances(self, left: np.ndarray, right: np.ndarray) -> np.ndarray:
         left_norm = np.sum(left * left, axis=1, keepdims=True)

@@ -49,6 +49,24 @@ class TestPhysicsResidualKernelRegressor(unittest.TestCase):
         self.assertEqual(pred.shape, (4,))
         self.assertTrue(np.isfinite(pred).all())
 
+    def test_multiscale_kernel_predicts(self):
+        frame = pd.DataFrame(
+            {
+                "endpoint_tg_fox_c": np.linspace(0.0, 10.0, 12),
+                "emb_mean_000": np.linspace(-1.0, 1.0, 12),
+            }
+        )
+        y = np.linspace(0.0, 10.0, 12) ** 1.2
+        model = PhysicsResidualKernelRegressor(
+            n_landmarks=6,
+            kernel_scales=(0.5, 1.0, 2.0),
+            random_state=2,
+        )
+        model.fit(frame, y)
+        pred = model.predict(frame)
+        self.assertEqual(pred.shape, (12,))
+        self.assertTrue(np.isfinite(pred).all())
+
 
 if __name__ == "__main__":
     unittest.main()
