@@ -67,6 +67,12 @@ class TestTrainUniversalSingleRegressor(unittest.TestCase):
         self.assertEqual(model.local_k, 12)
         self.assertGreater(model.local_weight, 0.0)
 
+    def test_choose_model_returns_custom_physics_local_light(self):
+        model = choose_model("physics_local_light", random_state=7)
+        self.assertEqual(model.__class__.__name__, "PhysicsResidualKernelRegressor")
+        self.assertEqual(model.local_k, 8)
+        self.assertAlmostEqual(model.local_weight, 0.15)
+
     def test_normalise_limit_distinguishes_disable_from_unlimited(self):
         self.assertIsNone(_normalise_limit(-1))
         self.assertEqual(_normalise_limit(0), 0)

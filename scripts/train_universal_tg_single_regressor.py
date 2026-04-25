@@ -129,6 +129,15 @@ def choose_model(name: str, random_state: int = 42):
             local_k=12,
             local_weight=0.55,
         )
+    if key == "physics_local_light":
+        return PhysicsResidualKernelRegressor(
+            n_landmarks=1200,
+            prior_lambda=0.5,
+            residual_lambda=2.0,
+            random_state=random_state,
+            local_k=8,
+            local_weight=0.15,
+        )
     if key == "histgradient":
         return HistGradientBoostingRegressor(
             max_iter=800,
@@ -613,7 +622,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--build-table", action="store_true", help="Build unified feature table before training.")
     parser.add_argument("--table", default="results/universal_single_regressor/unified_training_table.parquet")
     parser.add_argument("--output-dir", default="results/universal_single_regressor/exp_default")
-    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient", "xgboost", "lightgbm", "physics_kernel", "physics_multikernel", "physics_local"])
+    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient", "xgboost", "lightgbm", "physics_kernel", "physics_multikernel", "physics_local", "physics_local_light"])
     parser.add_argument("--feature-layer", default="M2M-V")
     parser.add_argument("--morgan-bits", type=int, default=256)
     parser.add_argument("--test-size", type=float, default=0.2)
