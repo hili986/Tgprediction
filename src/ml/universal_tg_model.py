@@ -48,6 +48,9 @@ class PhysicsResidualKernelRegressor:
         high_dim_start: Optional[int] = None,
         high_dim_end: Optional[int] = None,
         high_dim_kernel_weight: float = 1.0,
+        homo_correction: bool = False,
+        homo_correction_lambda: float = 1.0,
+        homo_correction_landmarks: int = 800,
     ) -> None:
         self.n_landmarks = int(n_landmarks)
         self.gamma = gamma
@@ -62,6 +65,9 @@ class PhysicsResidualKernelRegressor:
         self.high_dim_start = high_dim_start
         self.high_dim_end = high_dim_end
         self.high_dim_kernel_weight = float(high_dim_kernel_weight)
+        self.homo_correction = bool(homo_correction)
+        self.homo_correction_lambda = float(homo_correction_lambda)
+        self.homo_correction_landmarks = int(homo_correction_landmarks)
         self.prior_column_patterns = list(
             prior_column_patterns
             or [
@@ -107,9 +113,11 @@ class PhysicsResidualKernelRegressor:
         phi = self._rbf_features(x_kernel)
         kernel_residual = residual
         self.residual_coef_ = self._weighted_ridge(phi, kernel_residual, weights, self.residual_lambda)
+        base_pred = prior_pred + phi @ self.residual_coef_
         self.train_kernel_ = x_kernel.copy()
         self.train_residual_ = residual.copy()
         self.train_weights_ = weights.copy()
+        self._fit_homopolymer_correction(x_scaled, y_arr - base_pred, weights, feature_names)
         self.diagnostics_ = PhysicsKernelDiagnostics(
             n_train=int(x_scaled.shape[0]),
             n_landmarks=int(self.landmarks_.shape[0]),
@@ -125,9 +133,14 @@ class PhysicsResidualKernelRegressor:
         prior = self._prior_design(x_scaled) @ self.prior_coef_
         kernel_residual = self._rbf_features(x_kernel) @ self.residual_coef_
         if self.local_k <= 0 or self.local_weight <= 0:
-            return prior + kernel_residual
+            return prior + kernel_residual + self._homopolymer_correction(x_scaled)
         local_residual = self._local_residual(x_kernel)
-        return prior + (1.0 - self.local_weight) * kernel_residual + self.local_weight * local_residual
+        return (
+            prior
+            + (1.0 - self.local_weight) * kernel_residual
+            + self.local_weight * local_residual
+            + self._homopolymer_correction(x_scaled)
+        )
 
     def _as_matrix_and_names(self, X) -> tuple[np.ndarray, list[str]]:
         if pd is not None and isinstance(X, pd.DataFrame):
@@ -202,6 +215,77 @@ class PhysicsResidualKernelRegressor:
                     if start <= dim < end:
                         weights[idx] *= self.high_dim_kernel_weight
         return weights
+
+    def _high_dim_indices(self, feature_names: Sequence[str]) -> np.ndarray:
+        if self.high_dim_start is None:
+            return np.asarray([], dtype=int)
+        end = self.high_dim_end if self.high_dim_end is not None else 10**9
+        start = max(0, int(self.high_dim_start))
+        indices: list[int] = []
+        for idx, name in enumerate(feature_names):
+            for prefix in ["emb_mean_", "emb_std_", "emb_min_", "emb_max_", "emb_contrast_"]:
+                if str(name).startswith(prefix):
+                    try:
+                        dim = int(str(name).rsplit("_", 1)[1])
+                    except ValueError:
+                        continue
+                    if start <= dim < end:
+                        indices.append(idx)
+        return np.asarray(indices, dtype=int)
+
+    def _fit_homopolymer_correction(
+        self,
+        x_scaled: np.ndarray,
+        residual: np.ndarray,
+        weights: np.ndarray,
+        feature_names: Sequence[str],
+    ) -> None:
+        self.homo_indices_ = self._high_dim_indices(feature_names)
+        self.homo_correction_coef_ = None
+        self.homo_landmarks_ = None
+        self.homo_gamma_ = None
+        if not self.homo_correction or self.homo_indices_.size == 0:
+            return
+        try:
+            homo_col = list(feature_names).index("is_homopolymer")
+        except ValueError:
+            return
+        homo_mask = x_scaled[:, homo_col] > 0.0
+        if int(np.sum(homo_mask)) < 5:
+            return
+        x_homo = x_scaled[homo_mask][:, self.homo_indices_]
+        y_homo = residual[homo_mask]
+        w_homo = weights[homo_mask]
+        landmark_count = min(max(1, self.homo_correction_landmarks), x_homo.shape[0])
+        if landmark_count == x_homo.shape[0]:
+            landmark_idx = np.arange(x_homo.shape[0])
+        else:
+            rng = np.random.default_rng(self.random_state)
+            prob = w_homo / float(w_homo.sum()) if float(w_homo.sum()) > 0 else None
+            landmark_idx = np.sort(rng.choice(x_homo.shape[0], size=landmark_count, replace=False, p=prob))
+        self.homo_landmarks_ = x_homo[landmark_idx].copy()
+        self.homo_gamma_ = self._median_gamma(self.homo_landmarks_)
+        phi = np.exp(-self.homo_gamma_ * self._squared_distances(x_homo, self.homo_landmarks_))
+        self.homo_correction_coef_ = self._weighted_ridge(
+            phi,
+            y_homo,
+            w_homo,
+            self.homo_correction_lambda,
+        )
+
+    def _homopolymer_correction(self, x_scaled: np.ndarray) -> np.ndarray:
+        if self.homo_correction_coef_ is None or self.homo_landmarks_ is None or self.homo_gamma_ is None:
+            return np.zeros(x_scaled.shape[0], dtype=float)
+        try:
+            homo_col = self.feature_names_.index("is_homopolymer")
+        except ValueError:
+            return np.zeros(x_scaled.shape[0], dtype=float)
+        gate = (x_scaled[:, homo_col] > 0.0).astype(float)
+        if not np.any(gate):
+            return np.zeros(x_scaled.shape[0], dtype=float)
+        x_homo = x_scaled[:, self.homo_indices_]
+        phi = np.exp(-self.homo_gamma_ * self._squared_distances(x_homo, self.homo_landmarks_))
+        return gate * (phi @ self.homo_correction_coef_)
 
     def _prior_design(self, x_scaled: np.ndarray) -> np.ndarray:
         intercept = np.ones((x_scaled.shape[0], 1), dtype=float)

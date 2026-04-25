@@ -212,6 +212,19 @@ def choose_model(name: str, random_state: int = 42):
             high_dim_end=232,
             high_dim_kernel_weight=0.25,
         )
+    if key == "physics_homo_correction":
+        return PhysicsResidualKernelRegressor(
+            n_landmarks=1200,
+            prior_lambda=0.5,
+            residual_lambda=2.0,
+            random_state=random_state,
+            high_dim_start=46,
+            high_dim_end=232,
+            high_dim_kernel_weight=0.0,
+            homo_correction=True,
+            homo_correction_lambda=0.5,
+            homo_correction_landmarks=900,
+        )
     if key == "histgradient":
         return HistGradientBoostingRegressor(
             max_iter=800,
@@ -713,7 +726,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--build-table", action="store_true", help="Build unified feature table before training.")
     parser.add_argument("--table", default="results/universal_single_regressor/unified_training_table.parquet")
     parser.add_argument("--output-dir", default="results/universal_single_regressor/exp_default")
-    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient", "xgboost", "lightgbm", "physics_kernel", "physics_multikernel", "physics_local", "physics_local_light", "physics_hybrid_balanced"])
+    parser.add_argument("--model", default="catboost", choices=["catboost", "extratrees", "histgradient", "xgboost", "lightgbm", "physics_kernel", "physics_multikernel", "physics_local", "physics_local_light", "physics_hybrid_balanced", "physics_homo_correction"])
     parser.add_argument("--feature-layer", default="M2M-V")
     parser.add_argument("--morgan-bits", type=int, default=256)
     parser.add_argument("--test-size", type=float, default=0.2)

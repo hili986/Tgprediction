@@ -103,6 +103,29 @@ class TestPhysicsResidualKernelRegressor(unittest.TestCase):
         idx = list(frame.columns).index("emb_mean_046")
         self.assertAlmostEqual(model.kernel_feature_weights_[idx], 0.25)
 
+    def test_homopolymer_correction_is_gated(self):
+        frame = pd.DataFrame(
+            {
+                "is_homopolymer": [1.0, 1.0, 1.0, 0.0, 0.0, 0.0],
+                "endpoint_tg_fox_c": [0.0, 1.0, 2.0, 0.0, 1.0, 2.0],
+                "emb_mean_046": [0.0, 1.0, 2.0, 50.0, 51.0, 52.0],
+            }
+        )
+        y = np.array([10.0, 11.0, 12.0, 0.0, 1.0, 2.0])
+        model = PhysicsResidualKernelRegressor(
+            n_landmarks=4,
+            high_dim_start=46,
+            high_dim_end=232,
+            high_dim_kernel_weight=0.0,
+            homo_correction=True,
+            homo_correction_landmarks=3,
+            random_state=5,
+        )
+        model.fit(frame, y)
+        pred = model.predict(frame)
+        self.assertLess(float(np.mean(np.abs(pred[:3] - y[:3]))), 4.0)
+        self.assertLess(float(np.mean(np.abs(pred[3:] - y[3:]))), 4.0)
+
 
 if __name__ == "__main__":
     unittest.main()
