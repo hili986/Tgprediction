@@ -461,6 +461,9 @@ def make_estimator(model_name: str, random_state: int) -> Pipeline:
 
 
 def _fit_with_optional_weights(estimator: Pipeline, x: pd.DataFrame, y: pd.Series, weights: np.ndarray) -> None:
+    if not isinstance(estimator, Pipeline):
+        estimator.fit(x, y, sample_weight=weights)
+        return
     try:
         estimator.fit(x, y, model__sample_weight=weights)
     except TypeError:

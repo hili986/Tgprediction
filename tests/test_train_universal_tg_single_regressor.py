@@ -7,6 +7,7 @@ import pandas as pd
 
 from scripts.train_universal_tg_single_regressor import (
     _normalise_limit,
+    _fit_with_optional_weights,
     build_table_from_records,
     choose_model,
     compute_metrics,
@@ -59,6 +60,22 @@ class TestTrainUniversalSingleRegressor(unittest.TestCase):
         self.assertIsNone(_normalise_limit(-1))
         self.assertEqual(_normalise_limit(0), 0)
         self.assertEqual(_normalise_limit(10), 10)
+
+    def test_fit_with_optional_weights_passes_direct_estimator_sample_weight(self):
+        class DirectEstimator:
+            def fit(self, x, y, sample_weight=None):
+                self.sample_weight = sample_weight
+                return self
+
+        estimator = DirectEstimator()
+        weights = np.array([1.0, 2.0])
+        _fit_with_optional_weights(
+            estimator,
+            pd.DataFrame({"x": [0.0, 1.0]}),
+            pd.Series([0.0, 1.0]),
+            weights,
+        )
+        self.assertTrue(np.allclose(estimator.sample_weight, weights))
 
     def test_build_table_from_records_returns_numeric_features(self):
         records = [
