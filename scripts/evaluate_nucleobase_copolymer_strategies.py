@@ -203,6 +203,48 @@ def _physics_ridge_fit(
     return _ridge_fit_predict(x, y, x)
 
 
+def _fox_feature(points: list[BinaryCopolymerPoint]) -> np.ndarray:
+    return np.asarray(
+        [
+            [fox_tg_k([point.tg1_k, point.tg2_k], [point.w1, 1.0 - point.w1])]
+            for point in points
+        ],
+        dtype=float,
+    )
+
+
+def _linear_fox_loocv(points: list[BinaryCopolymerPoint]) -> np.ndarray:
+    x = _fox_feature(points)
+    y = np.asarray([point.target_tg_k for point in points], dtype=float)
+    preds = []
+    for index in range(len(points)):
+        train = np.array([i for i in range(len(points)) if i != index], dtype=int)
+        preds.append(_ridge_fit_predict(x[train], y[train], x[[index]])[0])
+    return np.asarray(preds, dtype=float)
+
+
+def _linear_fox_leave_group_out(
+    points: list[BinaryCopolymerPoint],
+    labels: Sequence[str],
+) -> np.ndarray:
+    x = _fox_feature(points)
+    y = np.asarray([point.target_tg_k for point in points], dtype=float)
+    labels_array = np.asarray(labels)
+    preds = []
+    for index, label in enumerate(labels_array):
+        train = np.flatnonzero(labels_array != label)
+        if len(train) == 0:
+            train = np.array([i for i in range(len(points)) if i != index], dtype=int)
+        preds.append(_ridge_fit_predict(x[train], y[train], x[[index]])[0])
+    return np.asarray(preds, dtype=float)
+
+
+def _linear_fox_fit(points: list[BinaryCopolymerPoint]) -> np.ndarray:
+    x = _fox_feature(points)
+    y = np.asarray([point.target_tg_k for point in points], dtype=float)
+    return _ridge_fit_predict(x, y, x)
+
+
 def _metrics(y_true_k: np.ndarray, y_pred_k: np.ndarray) -> Dict[str, float]:
     valid = np.isfinite(y_true_k) & np.isfinite(y_pred_k)
     if not valid.any():
@@ -241,6 +283,11 @@ def evaluate_strategies(predictions: pd.DataFrame) -> tuple[pd.DataFrame, Dict[s
         labels = [str(value) for value in random_rows["Nucleobase"].tolist()]
         details["gt_loocv_actual_endpoint_tg_c"] = _loocv_gt(actual_points) - 273.15
         details["kwei_loocv_actual_endpoint_tg_c"] = _loocv_kwei(actual_points) - 273.15
+        details["linear_fox_loocv_actual_endpoint_tg_c"] = _linear_fox_loocv(actual_points) - 273.15
+        details["linear_fox_leave_base_out_actual_endpoint_tg_c"] = (
+            _linear_fox_leave_group_out(actual_points, labels) - 273.15
+        )
+        details["linear_fox_fit_actual_endpoint_tg_c"] = _linear_fox_fit(actual_points) - 273.15
         details["physics_ridge_loocv_actual_endpoint_tg_c"] = (
             _physics_ridge_loocv(actual_points, labels) - 273.15
         )
@@ -259,6 +306,9 @@ def evaluate_strategies(predictions: pd.DataFrame) -> tuple[pd.DataFrame, Dict[s
     else:
         details["gt_loocv_actual_endpoint_tg_c"] = float("nan")
         details["kwei_loocv_actual_endpoint_tg_c"] = float("nan")
+        details["linear_fox_loocv_actual_endpoint_tg_c"] = float("nan")
+        details["linear_fox_leave_base_out_actual_endpoint_tg_c"] = float("nan")
+        details["linear_fox_fit_actual_endpoint_tg_c"] = float("nan")
         details["physics_ridge_loocv_actual_endpoint_tg_c"] = float("nan")
         details["physics_ridge_leave_base_out_actual_endpoint_tg_c"] = float("nan")
         details["physics_ridge_fit_actual_endpoint_tg_c"] = float("nan")
@@ -273,6 +323,9 @@ def evaluate_strategies(predictions: pd.DataFrame) -> tuple[pd.DataFrame, Dict[s
         "gt_loocv_actual_endpoint_tg_c",
         "kwei_loocv_actual_endpoint_tg_c",
         "kwei_fit_actual_endpoint_tg_c",
+        "linear_fox_loocv_actual_endpoint_tg_c",
+        "linear_fox_leave_base_out_actual_endpoint_tg_c",
+        "linear_fox_fit_actual_endpoint_tg_c",
         "physics_ridge_loocv_actual_endpoint_tg_c",
         "physics_ridge_leave_base_out_actual_endpoint_tg_c",
         "physics_ridge_fit_actual_endpoint_tg_c",

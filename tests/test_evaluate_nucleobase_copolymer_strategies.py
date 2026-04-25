@@ -43,10 +43,12 @@ class TestEvaluateNucleobaseCopolymerStrategies(unittest.TestCase):
 
         self.assertEqual(len(details), 1)
         self.assertIn("fox_actual_endpoint_tg_c", details.columns)
+        self.assertIn("linear_fox_leave_base_out_actual_endpoint_tg_c", details.columns)
         self.assertIn("physics_ridge_loocv_actual_endpoint_tg_c", details.columns)
         self.assertIn("physics_ridge_leave_base_out_actual_endpoint_tg_c", details.columns)
         self.assertEqual(summary["n_random_rows"], 1)
         self.assertIn("base_pred_tg_c", summary["overall"])
+        self.assertIn("linear_fox_leave_base_out_actual_endpoint_tg_c", summary["overall"])
         self.assertIn("physics_ridge_loocv_actual_endpoint_tg_c", summary["overall"])
 
 

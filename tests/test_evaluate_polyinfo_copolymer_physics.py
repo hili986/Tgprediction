@@ -44,6 +44,7 @@ class TestEvaluatePolyinfoCopolymerPhysics(unittest.TestCase):
 
         self.assertEqual(summary["n_usable"], 2)
         self.assertIn("fox_endpoint_tg_c", summary["overall"])
+        self.assertIn("linear_fox_leave_system_out_endpoint_tg_c", summary["overall"])
         self.assertIn("physics_ridge_loocv_endpoint_tg_c", details.columns)
 
 

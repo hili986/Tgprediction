@@ -249,6 +249,40 @@ def _ridge_fit_predictions(points: list[BinaryCopolymerPoint], labels: Sequence[
     return _ridge_fit_predict(x, y, x)
 
 
+def _fox_feature(points: list[BinaryCopolymerPoint]) -> np.ndarray:
+    return np.asarray(
+        [
+            [fox_tg_k([point.tg1_k, point.tg2_k], [point.w1, 1.0 - point.w1])]
+            for point in points
+        ],
+        dtype=float,
+    )
+
+
+def _linear_fox_cv_predictions(
+    points: list[BinaryCopolymerPoint],
+    labels: Sequence[str],
+    mode: str,
+) -> np.ndarray:
+    x = _fox_feature(points)
+    y = np.asarray([point.target_tg_k for point in points], dtype=float)
+    labels_array = np.asarray(labels)
+    preds = []
+    for index in range(len(points)):
+        if mode == "leave_group_out":
+            train = np.flatnonzero(labels_array != labels_array[index])
+        else:
+            train = np.array([i for i in range(len(points)) if i != index], dtype=int)
+        preds.append(_ridge_fit_predict(x[train], y[train], x[[index]])[0])
+    return np.asarray(preds, dtype=float)
+
+
+def _linear_fox_fit_predictions(points: list[BinaryCopolymerPoint]) -> np.ndarray:
+    x = _fox_feature(points)
+    y = np.asarray([point.target_tg_k for point in points], dtype=float)
+    return _ridge_fit_predict(x, y, x)
+
+
 def _metrics(y_true_k: np.ndarray, y_pred_k: np.ndarray) -> Dict[str, float]:
     valid = np.isfinite(y_true_k) & np.isfinite(y_pred_k)
     if not valid.any():
@@ -292,6 +326,11 @@ def evaluate_polyinfo_physics(
         "kwei_loocv_endpoint_tg_c": _loocv_kwei(points) - 273.15,
         "kwei_leave_system_out_endpoint_tg_c": _leave_group_out_kwei(points, labels) - 273.15,
         "kwei_same_system_pref_loocv_endpoint_tg_c": _same_group_preferred_kwei(points, labels) - 273.15,
+        "linear_fox_loocv_endpoint_tg_c": _linear_fox_cv_predictions(points, labels, "loocv") - 273.15,
+        "linear_fox_leave_system_out_endpoint_tg_c": (
+            _linear_fox_cv_predictions(points, labels, "leave_group_out") - 273.15
+        ),
+        "linear_fox_fit_endpoint_tg_c": _linear_fox_fit_predictions(points) - 273.15,
         "physics_ridge_loocv_endpoint_tg_c": _ridge_cv_predictions(points, labels, "loocv") - 273.15,
         "physics_ridge_leave_system_out_endpoint_tg_c": (
             _ridge_cv_predictions(points, labels, "leave_group_out") - 273.15
