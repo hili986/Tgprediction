@@ -59,3 +59,31 @@ u9a8c*
 
 # Test logs
 tests/.claude-test-results.log
+
+# Node tooling (for ppt-gen scripts)
+node_modules/
+
+# Pretrained polymer language model (too large)
+polybert/
+polybert.zip
+
+# Generated / scratch output dirs
+archive/
+output/
+tmp/
+logs/
+
+# External tooling state
+.omx/
+
+# Office lockfiles
+~$*
+
+# Course / defense materials kept locally
+答辩图片/
+科学前沿与实践/
+第二组--27号--*.pptx
+
+# Stray local-only scripts
+tmp_citedrive_viewer.js
+
