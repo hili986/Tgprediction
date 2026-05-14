@@ -1,0 +1,663 @@
+Polymer ID(PID):	P040006
+IUPAC structure based name:	poly[1-(butoxycarbonyl)ethylene]
+IUPAC source based name:	poly(butyl acrylate)
+Abbreviation:	PBA
+Polymer Class:	Polyacrylics,Polyvinyls
+CU formula:	C7H12O2
+Formula weight(FW):	128.17
+Smiles:	CCCCOC(=O)C(C*)*
+CU Chemical Structure
+
+Information:
+Polymer ID(PID):	P040001
+IUPAC structure based name:	poly(1-carboxyethylene)
+IUPAC source based name:	poly(acrylic acid)
+Other name:	polyacrylic acid
+carboxyvinyl polymer
+Abbreviation:	PAA
+Polymer Class:	Polyacrylics,Polyvinyls
+CU formula:	C3H4O2
+Formula weight(FW):	72.06
+Smiles:	*C(C(=O)O)C*
+
+Polymer ID(PID):	P040003
+IUPAC structure based name:	poly[1-(ethoxycarbonyl)ethylene]
+IUPAC source based name:	poly(ethyl acrylate)
+Polymer Class:	Polyacrylics,Polyvinyls
+CU formula:	C5H8O2
+Formula weight(FW):	100.12
+Smiles:	CCOC(=O)C(C*)*
+
+Information:
+Polymer ID(PID):	P010001
+IUPAC structure based name:	poly(methylene)
+IUPAC source based name:	polyethene
+poly(diazomethane)
+Other name:	polyethylene
+poly(ethylene)
+Abbreviation:	PE
+Polymer Class:	Polyolefins
+CU formula:	CH2
+Formula weight(FW):	14.03
+Smiles:	*C*
+
+Information:
+Polymer ID(PID):	P030010
+IUPAC structure based name:	poly(1-cyanoethylene)
+IUPAC source based name:	polyacrylonitrile
+Abbreviation:	PAN
+Polymer Class:	Polyvinyls
+CU formula:	C3H3N
+Formula weight(FW):	53.06
+Smiles:	*C(C#N)C*
+Information:
+Polymer ID(PID):	P020001
+IUPAC structure based name:	poly(1-phenylethylene)
+IUPAC source based name:	polystyrene
+polyvinylbenzene
+Other name:	poly(vinylbenzene)
+poly(styrene)
+Abbreviation:	PS
+Polymer Class:	Polystyrenes,Polyvinyls
+CU formula:	C8H8
+Formula weight(FW):	104.15
+Smiles:	*CC(c1ccccc1)*
+
+Information:
+Polymer ID(PID):	P030010
+IUPAC structure based name:	poly(1-cyanoethylene)
+IUPAC source based name:	polyacrylonitrile
+Abbreviation:	PAN
+Polymer Class:	Polyvinyls
+CU formula:	C3H3N
+Formula weight(FW):	53.06
+Smiles:	*C(C#N)C*
+
+Information:
+Polymer ID(PID):	P040006
+IUPAC structure based name:	poly[1-(butoxycarbonyl)ethylene]
+IUPAC source based name:	poly(butyl acrylate)
+Abbreviation:	PBA
+Polymer Class:	Polyacrylics,Polyvinyls
+CU formula:	C7H12O2
+Formula weight(FW):	128.17
+Smiles:	CCCCOC(=O)C(C*)*
+
+Information:
+Polymer ID(PID):	P040048
+IUPAC structure based name:	poly[1-(methoxycarbonyl)-1-methylethylene]
+IUPAC source based name:	poly(methyl methacrylate)
+Abbreviation:	PMMA
+Polymer Class:	Polyacrylics,Polyvinyls
+CU formula:	C5H8O2
+Formula weight(FW):	100.12
+Smiles:	*C(C(=O)OC)(C*)C
+
+Information:
+Polymer ID(PID):	P100004
+IUPAC structure based name:	poly[imino(1-oxohexane-1,6-diyl)]
+IUPAC source based name:	poly(hexano-6-lactam)
+poly(6-aminohexanoic acid)
+poly(ethyl 6-aminohexanoate)
+Other name:	nylon 6
+polyamide 6
+poly(epsilon-caprolactam)
+poly(6-aminocaproic acid)
+poly[imino(1-oxohexamethylene)]
+polycaprolactam
+polycapramide
+Abbreviation:	N6
+PA 6
+Polymer Class:	Polyamides/thioamides
+CU formula:	C6H11NO
+Formula weight(FW):	113.16
+Smiles:	*CCCCCC(=O)N*
+
+Information:
+Polymer ID(PID):	P100025
+IUPAC structure based name:	poly[imino(1-oxododecane-1,12-diyl)]
+IUPAC source based name:	poly(dodecano-12-lactam)
+poly(12-aminododecanoic acid)
+Other name:	nylon 12
+polyamide 12
+poly(12-aminolauric acid)
+polylaurolactam
+Abbreviation:	PA 12
+Polymer Class:	Polyamides/thioamides
+CU formula:	C12H23NO
+Formula weight(FW):	197.32
+Smiles:	*CCCCCCCCCCCC(=O)N*
+
+Information:
+Polymer ID(PID):	P040003
+IUPAC structure based name:	poly[1-(ethoxycarbonyl)ethylene]
+IUPAC source based name:	poly(ethyl acrylate)
+Polymer Class:	Polyacrylics,Polyvinyls
+CU formula:	C5H8O2
+Formula weight(FW):	100.12
+Smiles:	CCOC(=O)C(C*)*
+
+Information:
+Polymer ID(PID):	P040047
+IUPAC structure based name:	poly(1-carboxy-1-methylethylene)
+IUPAC source based name:	poly(methacrylic acid)
+Polymer Class:	Polyacrylics,Polyvinyls
+CU formula:	C4H6O2
+Formula weight(FW):	86.09
+Smiles:	*C(C(=O)O)(C*)C
+
+Information:
+Polymer ID(PID):	P100005
+IUPAC structure based name:	poly(iminoadipoyliminohexane-1,6-diyl)
+IUPAC source based name:	poly[(hexane-1,6-diamine)-alt-(adipic acid)]
+poly[(hexane-1,6-diamine)-alt-(heptanedioic acid)]
+poly[(hexane-1,6-diamine)-alt-(adipoyl dichloride)]
+poly[(hexane-1,6-diyl diisocyanate)-alt-(adipic acid)]
+poly[6-(formylamino)hexanoic acid]
+Other name:	nylon 6,6
+polyamide 6,6
+polyamide 66
+nylon 66
+poly(N,N'-hexamethyleneadipamide)
+poly(nylon 66 salt)
+Abbreviation:	N66
+PA 66
+Polymer Class:	Polyamides/thioamides
+CU formula:	C12H22N2O2
+Formula weight(FW):	226.32
+Smiles:	*CCCCCCNC(=O)CCCCC(=O)N*
+
+Information:
+Polymer ID(PID):	P030010
+IUPAC structure based name:	poly(1-cyanoethylene)
+IUPAC source based name:	polyacrylonitrile
+Abbreviation:	PAN
+Polymer Class:	Polyvinyls
+CU formula:	C3H3N
+Formula weight(FW):	53.06
+Smiles:	*C(C#N)C*
+
+Information:
+Polymer ID(PID):	P020001
+IUPAC structure based name:	poly(1-phenylethylene)
+IUPAC source based name:	polystyrene
+polyvinylbenzene
+Other name:	poly(vinylbenzene)
+poly(styrene)
+Abbreviation:	PS
+Polymer Class:	Polystyrenes,Polyvinyls
+CU formula:	C8H8
+Formula weight(FW):	104.15
+Smiles:	*CC(c1ccccc1)*
+
+Information:
+Polymer ID(PID):	P170031
+IUPAC structure based name:	poly(dimethylsiloxane)
+poly[oxy(dimethylsilanediyl)]
+IUPAC source based name:	poly(dimethylsilanediol)
+poly(octamethylcyclotetrasiloxane)
+poly(hexamethylcyclotrisiloxane)
+poly(dichlorodimethylsilane-alt-water)
+poly(dichlorodimethylsilane-alt-oxidane)
+poly(hexamethyldisiloxane)
+Other name:	poly(oxydimethylsilylene)
+Abbreviation:	PDMS
+SI
+Polymer Class:	Polysiloxanes/silanes
+CU formula:	C2H6OSi
+Formula weight(FW):	74.15
+Smiles:	*O[Si](C)(C)*
+
+Information:
+Polymer ID(PID):	P170064
+IUPAC structure based name:	poly[(tetramethyldisiloxane-1,3-diyl)-1,4-phenylene]
+IUPAC source based name:	poly[alpha,alpha,alpha',alpha'-tetramethylbenzene-1,4-disilanol]
+Other name:	poly[tetramethyl-(p-phenylene disiloxanylene)]
+Polymer Class:	Polysiloxanes/silanes
+CU formula:	C10H16OSi2
+Formula weight(FW):	208.4
+Smiles:	*O[Si](c1ccc(cc1)[Si](C)(C)*)(C)C
+
+Information:
+Polymer ID(PID):	P010040
+IUPAC structure based name:	poly(1-hexylethylene)
+poly(hexylethylene)
+IUPAC source based name:	poly(oct-1-ene)
+poly(1-octene)
+Other name:	polyoctene
+Polymer Class:	Polyolefins
+CU formula:	C8H16
+Formula weight(FW):	112.21
+Smiles:	CCCCCCC(C*)*
+
+Information:
+Polymer ID(PID):	P010001
+IUPAC structure based name:	poly(methylene)
+IUPAC source based name:	polyethene
+poly(diazomethane)
+Other name:	polyethylene
+poly(ethylene)
+Abbreviation:	PE
+Polymer Class:	Polyolefins
+CU formula:	CH2
+Formula weight(FW):	14.03
+Smiles:	*C*
+
+
+Information:
+Polymer ID(PID):	P010002
+IUPAC structure based name:	poly(1-methylethylene)
+IUPAC source based name:	poly(prop-1-ene)
+Other name:	polypropylene
+polypropene
+poly(propylene)
+Abbreviation:	PP
+Polymer Class:	Polyolefins
+CU formula:	C3H6
+Formula weight(FW):	42.08
+Smiles:	*CC(C)*
+
+
+nformation:
+Polymer ID(PID):	P030024
+IUPAC structure based name:	poly[1-(acetyloxy)ethylene]
+IUPAC source based name:	poly(vinyl acetate)
+Other name:	PVAc
+poly(1-acetoxyethylene)
+poly(acetoxyethylene)
+polyvinyl acetate
+Abbreviation:	PVAC
+Polymer Class:	Polyvinyls
+CU formula:	C4H6O2
+Formula weight(FW):	86.09
+Smiles:	*C(OC(=O)C)C*
+
+
+Polymer ID(PID):	P030001
+IUPAC structure based name:	poly(1-hydroxyethylene)
+poly(hydroxyethylene)
+IUPAC source based name:	poly(vinyl alcohol)
+Other name:	polyvinyl alcohol
+PVA
+Abbreviation:	PVAL
+Polymer Class:	Polyvinyls
+CU formula:	C2H4O
+Formula weight(FW):	44.05
+Smiles:	*CC(O)*
+
+Information:
+Polymer ID(PID):	P049017
+IUPAC structure based name:	poly(2,5-dioxotetrahydrofuran-3,4-diyl)
+IUPAC source based name:	poly(maleic anhydride)
+Polymer Class:	Polyanhydrides/thioanhydrides
+CU formula:	C4H2O3
+Formula weight(FW):	98.06
+Smiles:	*C1C(=O)OC(=O)C1*
+
+
+
+高分子データベース
+DICE
+HELP:
+JP
+/
+EN
+
+    Polymer Search
+    /
+    Polymer Structure Search
+    /
+    Reactant Search
+    /
+    Plotted data Search
+    /
+    Text Search
+
+Polymer Information
+polystyrene
+CU Chemical Structure
+Information:
+Polymer ID(PID): 	P020001
+IUPAC structure based name: 	poly(1-phenylethylene)
+IUPAC source based name: 	polystyrene
+polyvinylbenzene
+Other name: 	poly(vinylbenzene)
+poly(styrene)
+Abbreviation: 	PS
+Polymer Class: 	Polystyrenes,Polyvinyls
+CU formula: 	C8H8
+Formula weight(FW): 	104.15
+Smiles: 	*CC(c1ccccc1)*
+Molfile: 	Molfile download (P020001_mol.zip)
+Links
+
+    Summary of property data
+    Polymerization paths & Candidate monomers
+    509 copolymers including this component
+    130 polymer blends including this component
+    NMR/IR information
+
+National Institute for Materials Science
+
+Advanced Engineering and Services Division
+Materials Data Platform
+
+Copyright Ⓒ 2026 National Institute for Materials Science. All rights Reserved.
+
+    Privacy Policy
+    GDPR Compliance
+    Contact
+
+
+高分子データベース
+DICE
+HELP:
+JP
+/
+EN
+
+    Polymer Search
+    /
+    Polymer Structure Search
+    /
+    Reactant Search
+    /
+    Plotted data Search
+    /
+    Text Search
+
+Polymer Information
+poly(methyl methacrylate)
+CU Chemical Structure
+Information:
+Polymer ID(PID): 	P040048
+IUPAC structure based name: 	poly[1-(methoxycarbonyl)-1-methylethylene]
+IUPAC source based name: 	poly(methyl methacrylate)
+Abbreviation: 	PMMA
+Polymer Class: 	Polyacrylics,Polyvinyls
+CU formula: 	C5H8O2
+Formula weight(FW): 	100.12
+Smiles: 	*C(C(=O)OC)(C*)C
+Molfile: 	Molfile download (P040048_mol.zip)
+Links
+
+    Summary of property data
+    Polymerization paths & Candidate monomers
+    343 copolymers including this component
+    103 polymer blends including this component
+    NMR/IR information
+
+National Institute for Materials Science
+
+Advanced Engineering and Services Division
+Materials Data Platform
+
+Copyright Ⓒ 2026 National Institute for Materials Science. All rights Reserved.
+
+    Privacy Policy
+    GDPR Compliance
+    Contact
+
+
+高分子データベース
+DICE
+HELP:
+JP
+/
+EN
+
+    Polymer Search
+    /
+    Polymer Structure Search
+    /
+    Reactant Search
+    /
+    Plotted data Search
+    /
+    Text Search
+
+Polymer Information
+poly(methyl acrylate)
+CU Chemical Structure
+Information:
+Polymer ID(PID): 	P040002
+IUPAC structure based name: 	poly[1-(methoxycarbonyl)ethylene]
+IUPAC source based name: 	poly(methyl acrylate)
+Other name: 	polymethyl acrylate
+Abbreviation: 	PMA
+Polymer Class: 	Polyacrylics,Polyvinyls
+CU formula: 	C4H6O2
+Formula weight(FW): 	86.09
+Smiles: 	*C(C(=O)OC)C*
+Molfile: 	Molfile download (P040002_mol.zip)
+Links
+
+    Summary of property data
+    Polymerization paths & Candidate monomers
+    52 copolymers including this component
+    16 polymer blends including this component
+    NMR/IR information
+
+National Institute for Materials Science
+
+Advanced Engineering and Services Division
+Materials Data Platform
+
+Copyright Ⓒ 2026 National Institute for Materials Science. All rights Reserved.
+
+    Privacy Policy
+    GDPR Compliance
+    Contact
+
+
+高分子データベース
+DICE
+HELP:
+JP
+/
+EN
+
+    Polymer Search
+    /
+    Polymer Structure Search
+    /
+    Reactant Search
+    /
+    Plotted data Search
+    /
+    Text Search
+
+Polymer Information
+poly(tetrafluoroethylene)
+CU Chemical Structure
+Information:
+Polymer ID(PID): 	P050006
+IUPAC structure based name: 	poly(difluoromethylene)
+IUPAC source based name: 	poly(tetrafluoroethene)
+poly(1,1,2,2-tetrafluoroethene)
+Other name: 	poly(tetrafluoroethylene)
+polytetrafluoroethylene
+Abbreviation: 	PTFE
+PTFEP
+Polymer Class: 	Polyhalo-olefins
+CU formula: 	CF2
+Formula weight(FW): 	50.01
+Smiles: 	*C(F)(F)*
+Molfile: 	Molfile download (P050006_mol.zip)
+Links
+
+    Summary of property data
+    Polymerization paths & Candidate monomers
+    54 copolymers including this component
+    14 polymer blends including this component
+    NMR/IR information
+
+National Institute for Materials Science
+
+Advanced Engineering and Services Division
+Materials Data Platform
+
+Copyright Ⓒ 2026 National Institute for Materials Science. All rights Reserved.
+
+    Privacy Policy
+    GDPR Compliance
+    Contact
+
+
+高分子データベース
+DICE
+HELP:
+JP
+/
+EN
+
+    Polymer Search
+    /
+    Polymer Structure Search
+    /
+    Reactant Search
+    /
+    Plotted data Search
+    /
+    Text Search
+
+Polymer Information
+poly(vinylidene fluoride)
+CU Chemical Structure
+Information:
+Polymer ID(PID): 	P050003
+IUPAC structure based name: 	poly(1,1-difluoroethylene)
+IUPAC source based name: 	poly(1,1-difluoroethene)
+Other name: 	poly(vinylidene fluoride)
+Abbreviation: 	PVDF
+Polymer Class: 	Polyhalo-olefins
+CU formula: 	C2H2F2
+Formula weight(FW): 	64.03
+Smiles: 	*CC(F)(F)*
+Molfile: 	Molfile download (P050003_mol.zip)
+Links
+
+    Summary of property data
+    Polymerization paths & Candidate monomers
+    30 copolymers including this component
+    41 polymer blends including this component
+    NMR/IR information
+
+National Institute for Materials Science
+
+Advanced Engineering and Services Division
+Materials Data Platform
+
+Copyright Ⓒ 2026 National Institute for Materials Science. All rights Reserved.
+
+    Privacy Policy
+    GDPR Compliance
+    Contact
+
+
+高分子データベース
+DICE
+HELP:
+JP
+/
+EN
+
+    Polymer Search
+    /
+    Polymer Structure Search
+    /
+    Reactant Search
+    /
+    Plotted data Search
+    /
+    Text Search
+
+Polymer Information
+poly(vinyl alcohol)
+CU Chemical Structure
+Information:
+Polymer ID(PID): 	P030001
+IUPAC structure based name: 	poly(1-hydroxyethylene)
+poly(hydroxyethylene)
+IUPAC source based name: 	poly(vinyl alcohol)
+Other name: 	polyvinyl alcohol
+PVA
+Abbreviation: 	PVAL
+Polymer Class: 	Polyvinyls
+CU formula: 	C2H4O
+Formula weight(FW): 	44.05
+Smiles: 	*CC(O)*
+Molfile: 	Molfile download (P030001_mol.zip)
+Links
+
+    Summary of property data
+    Polymerization paths & Candidate monomers
+    54 copolymers including this component
+    39 polymer blends including this component
+    NMR/IR information
+
+National Institute for Materials Science
+
+Advanced Engineering and Services Division
+Materials Data Platform
+
+Copyright Ⓒ 2026 National Institute for Materials Science. All rights Reserved.
+
+    Privacy Policy
+    GDPR Compliance
+    Contact
+
+
+高分子データベース
+DICE
+HELP:
+JP
+/
+EN
+
+    Polymer Search
+    /
+    Polymer Structure Search
+    /
+    Reactant Search
+    /
+    Plotted data Search
+    /
+    Text Search
+
+Polymer Information
+poly(vinyl acetate)
+CU Chemical Structure
+Information:
+Polymer ID(PID): 	P030024
+IUPAC structure based name: 	poly[1-(acetyloxy)ethylene]
+IUPAC source based name: 	poly(vinyl acetate)
+Other name: 	PVAc
+poly(1-acetoxyethylene)
+poly(acetoxyethylene)
+polyvinyl acetate
+Abbreviation: 	PVAC
+Polymer Class: 	Polyvinyls
+CU formula: 	C4H6O2
+Formula weight(FW): 	86.09
+Smiles: 	*C(OC(=O)C)C*
+Molfile: 	Molfile download (P030024_mol.zip)
+Links
+
+    Summary of property data
+    Polymerization paths & Candidate monomers
+    61 copolymers including this component
+    35 polymer blends including this component
+    NMR/IR information
+
+National Institute for Materials Science
+
+Advanced Engineering and Services Division
+Materials Data Platform
+
+Copyright Ⓒ 2026 National Institute for Materials Science. All rights Reserved.
+
+    Privacy Policy
+    GDPR Compliance
+    Contact
+
